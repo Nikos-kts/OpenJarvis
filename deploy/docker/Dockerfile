@@ -18,7 +18,7 @@ COPY src/ src/
 COPY --from=frontend /src/openjarvis/server/static src/openjarvis/server/static/
 
 RUN pip install --no-cache-dir uv && \
-    uv pip install --system ".[server]"
+    uv pip install --system ".[server,speech]"
 
 # Stage 3: Runtime
 FROM python:3.12-slim-bookworm
