@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 import type {
-  Conversation,
   ChatMessage,
+  Conversation,
   LogEntry,
-  ModelInfo,
   MessageTelemetry,
+  ModelInfo,
   SavingsData,
   ServerInfo,
   StreamState,
-  ToolCallInfo,
   TokenUsage,
+  ToolCallInfo,
 } from '../types';
 import type { ManagedAgent } from './api';
 
@@ -73,6 +73,10 @@ interface Settings {
   temperature: number;
   maxTokens: number;
   speechEnabled: boolean;
+  wakeWordEnabled: boolean;
+  wakeWordTimeout: number;
+  liveVoice: string;
+  voiceSilenceTimeout: number;
 }
 
 function loadSettings(): Settings {
@@ -85,6 +89,10 @@ function loadSettings(): Settings {
     temperature: 0.7,
     maxTokens: 4096,
     speechEnabled: false,
+    wakeWordEnabled: false,
+    wakeWordTimeout: 8,
+    liveVoice: 'Kore',
+    voiceSilenceTimeout: 30,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);

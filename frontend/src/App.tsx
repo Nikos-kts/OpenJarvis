@@ -1,19 +1,20 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Routes, Route } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router';
+import { CommandPalette } from './components/CommandPalette';
 import { Layout } from './components/Layout';
+import { OptInModal } from './components/OptInModal';
+import { SetupScreen } from './components/SetupScreen';
+import { VoicePanel } from './components/VoicePanel';
+import { Toaster } from './components/ui/sonner';
+import { fetchModels, fetchSavings, fetchServerInfo, isTauri, submitSavings } from './lib/api';
+import { useAppStore } from './lib/store';
+import { AgentsPage } from './pages/AgentsPage';
 import { ChatPage } from './pages/ChatPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { GetStartedPage } from './pages/GetStartedPage';
-import { AgentsPage } from './pages/AgentsPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
+import { GetStartedPage } from './pages/GetStartedPage';
 import { LogsPage } from './pages/LogsPage';
-import { CommandPalette } from './components/CommandPalette';
-import { SetupScreen } from './components/SetupScreen';
-import { Toaster } from './components/ui/sonner';
-import { useAppStore } from './lib/store';
-import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
-import { OptInModal } from './components/OptInModal';
+import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
   const [setupDone, setSetupDone] = useState(!isTauri());
@@ -67,7 +68,7 @@ export default function App() {
 
   // Fetch server info
   useEffect(() => {
-    fetchServerInfo().then(setServerInfo).catch(() => {});
+    fetchServerInfo().then(setServerInfo).catch(() => { });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll savings and optionally share to Supabase
@@ -102,7 +103,7 @@ export default function App() {
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     refresh();
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
@@ -181,6 +182,7 @@ export default function App() {
         </Route>
       </Routes>
       <Toaster position="bottom-right" />
+      <VoicePanel />
       {commandPaletteOpen && <CommandPalette />}
       {optInModalOpen && (
         <OptInModal onClose={() => setOptInModalOpen(false)} />

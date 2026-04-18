@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Square, Paperclip } from 'lucide-react';
-import { useAppStore, generateId } from '../../lib/store';
-import { streamChat } from '../../lib/sse';
-import { fetchSavings, getBase } from '../../lib/api';
-import { MicButton } from './MicButton';
+import { Send, Square } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSpeech } from '../../hooks/useSpeech';
-import type { ChatMessage, ToolCallInfo, TokenUsage, MessageTelemetry } from '../../types';
+import { fetchSavings, getBase } from '../../lib/api';
+import { streamChat } from '../../lib/sse';
+import { generateId, useAppStore } from '../../lib/store';
+import type { ChatMessage, MessageTelemetry, TokenUsage, ToolCallInfo } from '../../types';
+import { MicButton } from './MicButton';
 
 export function InputArea() {
   const [input, setInput] = useState('');
@@ -16,7 +16,6 @@ export function InputArea() {
   const activeId = useAppStore((s) => s.activeId);
   const selectedModel = useAppStore((s) => s.selectedModel);
   const streamState = useAppStore((s) => s.streamState);
-  const messages = useAppStore((s) => s.messages);
   const speechEnabled = useAppStore((s) => s.settings.speechEnabled);
   const maxTokens = useAppStore((s) => s.settings.maxTokens);
   const temperature = useAppStore((s) => s.settings.temperature);
@@ -48,9 +47,9 @@ export function InputArea() {
   const micDisabled = !speechEnabled || !speechAvailable || streamState.isStreaming;
   const micReason: 'not-enabled' | 'no-backend' | 'streaming' | undefined =
     !speechEnabled ? 'not-enabled'
-    : !speechAvailable ? 'no-backend'
-    : streamState.isStreaming ? 'streaming'
-    : undefined;
+      : !speechAvailable ? 'no-backend'
+        : streamState.isStreaming ? 'streaming'
+          : undefined;
 
   const handleMicClick = useCallback(async () => {
     if (speechState === 'recording') {
@@ -60,7 +59,7 @@ export function InputArea() {
           setInput((prev) => (prev ? prev + ' ' + text : text));
         }
       } catch {
-        // Error is captured in useSpeech
+        // ignore
       }
     } else {
       await startRecording();
@@ -182,7 +181,7 @@ export function InputArea() {
               timestamp: Date.now(), level: 'info', category: 'tool',
               message: `Calling ${data.tool}(${data.arguments || ''})`,
             });
-          } catch {}
+          } catch { }
         } else if (eventName === 'tool_call_end') {
           try {
             const data = JSON.parse(sseEvent.data);
@@ -199,7 +198,7 @@ export function InputArea() {
               activeToolCalls: [...toolCalls],
             });
             updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
-          } catch {}
+          } catch { }
         } else {
           try {
             const data = JSON.parse(sseEvent.data);
@@ -222,7 +221,7 @@ export function InputArea() {
               }
             }
             if (data.choices?.[0]?.finish_reason === 'stop') break;
-          } catch {}
+          } catch { }
         }
       }
     } catch (err: any) {
@@ -292,7 +291,7 @@ export function InputArea() {
 
       fetchSavings()
         .then((data) => useAppStore.getState().setSavings(data))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [
     input,

@@ -14,6 +14,7 @@ services:
     environment:
       - OPENJARVIS_ENGINE_DEFAULT=ollama
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     command: ["serve", "--port", "8000"]
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -1,24 +1,16 @@
-import { useState, useEffect } from 'react';
 import {
-  Palette,
-  Globe,
-  Cpu,
-  Database,
-  Info,
-  Check,
-  Sun,
-  Moon,
-  Monitor,
-  Download,
-  Upload,
-  Trash2,
-  Mic,
-  Key,
-  Search,
   Brain,
+  Check,
+  Download,
+  Monitor,
+  Moon,
+  Sun,
+  Trash2,
+  Upload
 } from 'lucide-react';
-import { useAppStore, type ThemeMode } from '../lib/store';
+import { useEffect, useState } from 'react';
 import { checkHealth, fetchSpeechHealth, getMemoryStats } from '../lib/api';
+import { useAppStore, type ThemeMode } from '../lib/store';
 
 function OllamaModelList() {
   const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
@@ -49,7 +41,7 @@ function ApiKeyInput({ storageKey, placeholder }: { storageKey: string; placehol
   const [saved, setSaved] = useState(false);
   const save = (v: string) => {
     setValue(v);
-    try { if (v) localStorage.setItem(storageKey, v); else localStorage.removeItem(storageKey); } catch {}
+    try { if (v) localStorage.setItem(storageKey, v); else localStorage.removeItem(storageKey); } catch { }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -181,7 +173,7 @@ export function SettingsPage() {
             useAppStore.getState().loadConversations();
             showSaved();
           }
-        } catch {}
+        } catch { }
       };
       reader.readAsText(file);
     };
@@ -351,7 +343,7 @@ export function SettingsPage() {
                 onClick={() => {
                   const next = !memoryEnabled;
                   setMemoryEnabled(next);
-                  try { localStorage.setItem('openjarvis-memory-enabled', String(next)); } catch {}
+                  try { localStorage.setItem('openjarvis-memory-enabled', String(next)); } catch { }
                   showSaved();
                 }}
                 className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
@@ -373,7 +365,7 @@ export function SettingsPage() {
                 value={memoryBackend}
                 onChange={(e) => {
                   setMemoryBackend(e.target.value);
-                  try { localStorage.setItem('openjarvis-memory-backend', e.target.value); } catch {}
+                  try { localStorage.setItem('openjarvis-memory-backend', e.target.value); } catch { }
                   showSaved();
                 }}
                 className="text-sm px-3 py-1.5 rounded-lg outline-none cursor-pointer"
@@ -400,7 +392,7 @@ export function SettingsPage() {
                 onChange={(e) => {
                   const v = parseInt(e.target.value);
                   setMemoryTopK(v);
-                  try { localStorage.setItem('openjarvis-memory-top-k', String(v)); } catch {}
+                  try { localStorage.setItem('openjarvis-memory-top-k', String(v)); } catch { }
                   showSaved();
                 }}
                 className="w-32 cursor-pointer accent-[var(--color-accent)]"
@@ -416,7 +408,7 @@ export function SettingsPage() {
                 onChange={(e) => {
                   const v = parseFloat(e.target.value);
                   setMemoryMinScore(v);
-                  try { localStorage.setItem('openjarvis-memory-min-score', String(v)); } catch {}
+                  try { localStorage.setItem('openjarvis-memory-min-score', String(v)); } catch { }
                   showSaved();
                 }}
                 className="w-32 cursor-pointer accent-[var(--color-accent)]"
@@ -432,7 +424,7 @@ export function SettingsPage() {
                 onChange={(e) => {
                   const v = parseInt(e.target.value);
                   setMemoryMaxTokens(v);
-                  try { localStorage.setItem('openjarvis-memory-max-tokens', String(v)); } catch {}
+                  try { localStorage.setItem('openjarvis-memory-max-tokens', String(v)); } catch { }
                   showSaved();
                 }}
                 className="w-32 cursor-pointer accent-[var(--color-accent)]"
@@ -492,13 +484,13 @@ export function SettingsPage() {
                   style={{
                     background: speechBackendAvailable === true ? 'var(--color-success)'
                       : speechBackendAvailable === false ? 'var(--color-text-tertiary)'
-                      : 'var(--color-text-tertiary)',
+                        : 'var(--color-text-tertiary)',
                   }}
                 />
                 <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                   {speechBackendAvailable === null ? 'Checking...'
                     : speechBackendAvailable ? 'Available'
-                    : 'Not configured'}
+                      : 'Not configured'}
                 </span>
               </div>
             </SettingRow>
@@ -508,6 +500,54 @@ export function SettingsPage() {
                 See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
               </div>
             )}
+            <SettingRow label="Wake word" description={`Say "Hey Jarvis" to start a voice conversation`}>
+              <button
+                onClick={() => { updateSettings({ wakeWordEnabled: !settings.wakeWordEnabled }); showSaved(); }}
+                disabled={!settings.speechEnabled}
+                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                style={{
+                  background: settings.wakeWordEnabled && settings.speechEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
+                  style={{
+                    transform: settings.wakeWordEnabled && settings.speechEnabled ? 'translateX(20px)' : 'translateX(0)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }}
+                />
+              </button>
+            </SettingRow>
+            <SettingRow label="Silence timeout" description={`${settings.voiceSilenceTimeout ?? 30}s — auto-mute after Jarvis responds and no follow-up`}>
+              <input
+                type="range"
+                min="5"
+                max="120"
+                step="5"
+                value={settings.voiceSilenceTimeout ?? 30}
+                onChange={(e) => { updateSettings({ voiceSilenceTimeout: parseFloat(e.target.value) }); showSaved(); }}
+                disabled={!settings.speechEnabled || !settings.wakeWordEnabled}
+                className="w-32 cursor-pointer accent-[var(--color-accent)] disabled:opacity-40"
+              />
+            </SettingRow>
+            <SettingRow label="Voice" description="Voice persona for Gemini Live conversations">
+              <select
+                value={settings.liveVoice || 'Kore'}
+                onChange={(e) => { updateSettings({ liveVoice: e.target.value }); showSaved(); }}
+                disabled={!settings.speechEnabled}
+                className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
+                style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              >
+                <option value="Kore">Kore (warm, female)</option>
+                <option value="Puck">Puck (upbeat, male)</option>
+                <option value="Charon">Charon (deep, male)</option>
+                <option value="Fenrir">Fenrir (bold, male)</option>
+                <option value="Aoede">Aoede (clear, female)</option>
+                <option value="Leda">Leda (gentle, female)</option>
+                <option value="Orus">Orus (steady, male)</option>
+                <option value="Zephyr">Zephyr (bright, neutral)</option>
+              </select>
+            </SettingRow>
           </Section>
 
           {/* Data */}

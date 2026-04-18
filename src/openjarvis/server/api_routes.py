@@ -783,6 +783,349 @@ async def speech_health(request: Request):
     }
 
 
+@speech_router.get("/wakeword/health")
+async def wakeword_health():
+    """Check if the openwakeword backend is available."""
+    from openjarvis.speech.wakeword import WakeWordDetector
+
+    return {"available": WakeWordDetector.available()}
+
+
+@speech_router.websocket("/wakeword")
+async def wakeword_stream(websocket: WebSocket):
+    """Stream audio over WebSocket for real-time wake word detection.
+
+    The client should:
+      1. Connect to this WebSocket endpoint.
+      2. Send raw 16-bit 16 kHz mono PCM audio frames as binary messages.
+         Recommended chunk size: 1280 samples = 2560 bytes (80 ms).
+      3. Listen for JSON messages:
+         - ``{"type": "detected", "score": 0.85}`` — wake word detected
+         - ``{"type": "ready"}`` — model loaded, ready for audio
+         - ``{"type": "error", "detail": "..."}`` — on failure
+      4. After receiving "detected", the client can close or keep streaming.
+    """
+    import asyncio
+
+    from openjarvis.speech.wakeword import WakeWordDetector
+
+    await websocket.accept()
+    _ww_log = logging.getLogger("uvicorn.error")
+    _ww_log.info("WakeWord WebSocket accepted")
+
+    if not WakeWordDetector.available():
+        _ww_log.warning("WakeWord: openwakeword not available")
+        await websocket.send_json(
+            {"type": "error", "detail": "openwakeword not installed"}
+        )
+        await websocket.close()
+        return
+
+    try:
+        # Initialize detector (will download model on first run)
+        _ww_log.info("WakeWord: initializing detector...")
+        detector = await asyncio.to_thread(WakeWordDetector, threshold=0.5)
+        _ww_log.info("WakeWord: detector ready")
+    except Exception as exc:
+        _ww_log.error("WakeWord: failed to load model: %s", exc)
+        await websocket.send_json(
+            {"type": "error", "detail": f"Failed to load model: {exc}"}
+        )
+        await websocket.close()
+        return
+
+    await websocket.send_json({"type": "ready"})
+
+    chunks_received = 0
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            chunks_received += 1
+            if chunks_received == 1:
+                _ww_log.info("WakeWord: first audio chunk received (%d bytes)", len(data))
+            elif chunks_received % 500 == 0:
+                _ww_log.info("WakeWord: %d chunks processed", chunks_received)
+
+            scores = await asyncio.to_thread(detector.process_audio, data)
+
+            # Check if any model exceeded threshold
+            for model_name, score in scores.items():
+                if score >= detector.threshold:
+                    _ww_log.info(
+                        "WakeWord: DETECTED '%s' score=%.3f (threshold=%.2f) after %d chunks",
+                        model_name, score, detector.threshold, chunks_received,
+                    )
+                    await websocket.send_json(
+                        {"type": "detected", "score": round(float(score), 3), "model": model_name}
+                    )
+                    detector.reset()
+                    break
+    except WebSocketDisconnect:
+        _ww_log.info("WakeWord: client disconnected after %d chunks", chunks_received)
+    except Exception as exc:
+        _ww_log.error("WakeWord: connection error after %d chunks: %s", chunks_received, exc)
+        try:
+            await websocket.send_json(
+                {"type": "error", "detail": "Connection error"}
+            )
+        except Exception:
+            pass
+
+
+# ---- Gemini Live voice routes ----
+
+voice_router = APIRouter(prefix="/v1/voice", tags=["voice"])
+
+_voice_log = logging.getLogger("uvicorn.error")
+
+
+@voice_router.get("/live/health")
+async def voice_live_health():
+    """Check if Gemini Live is available (API key configured)."""
+    import os
+
+    has_key = bool(os.environ.get("GEMINI_API_KEY"))
+    sdk_ok = False
+    try:
+        from google import genai  # noqa: F401
+        from google.genai import types  # noqa: F401
+
+        sdk_ok = True
+    except ImportError:
+        pass
+    return {"available": has_key and sdk_ok, "has_key": has_key, "sdk": sdk_ok}
+
+
+@voice_router.websocket("/live")
+async def voice_live_stream(websocket: WebSocket):
+    """Bidirectional audio streaming via Gemini Live API.
+
+    Protocol (browser ↔ server):
+      → Binary messages: raw 16-bit 16 kHz mono PCM audio from mic
+      → JSON ``{"type": "config", "voice": "Kore", "system": "..."}``
+      ← Binary messages: raw 16-bit 24 kHz mono PCM audio from Gemini
+      ← JSON ``{"type": "user_transcript", "text": "..."}``
+      ← JSON ``{"type": "assistant_transcript", "text": "..."}``
+      ← JSON ``{"type": "turn_complete"}``
+      ← JSON ``{"type": "interrupted"}``
+      ← JSON ``{"type": "error", "detail": "..."}``
+      ← JSON ``{"type": "ready"}``
+    """
+    import asyncio
+    import os
+
+    await websocket.accept()
+    _voice_log.info("Voice Live: WebSocket accepted")
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        await websocket.send_json(
+            {"type": "error", "detail": "GEMINI_API_KEY not configured"}
+        )
+        await websocket.close()
+        return
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        await websocket.send_json(
+            {"type": "error", "detail": "google-genai SDK not installed"}
+        )
+        await websocket.close()
+        return
+
+    # Wait for optional config message (voice, system instruction)
+    voice_name = "Kore"
+    system_text = "You are Jarvis, a helpful and concise AI assistant."
+
+    try:
+        first_msg = await asyncio.wait_for(websocket.receive(), timeout=2.0)
+        if first_msg.get("text"):
+            import json as _json
+
+            cfg = _json.loads(first_msg["text"])
+            if cfg.get("type") == "config":
+                voice_name = cfg.get("voice", voice_name)
+                system_text = cfg.get("system", system_text)
+    except (asyncio.TimeoutError, Exception):
+        # No config message — use defaults
+        pass
+
+    # --- Enrich system prompt with memory context ---
+    try:
+        from datetime import datetime
+
+        memory_backend = _get_memory_backend(websocket)
+        memory_snippets: list[str] = []
+        if memory_backend is not None:
+            try:
+                results = memory_backend.retrieve(
+                    "user profile preferences context", top_k=5
+                )
+                for r in results:
+                    content = getattr(r, "content", str(r))
+                    score = getattr(r, "score", 0.0)
+                    if score >= 0.3 and content.strip():
+                        memory_snippets.append(content.strip())
+            except Exception as exc:
+                _voice_log.debug("Voice Live: memory retrieval failed: %s", exc)
+
+        now = datetime.now()
+        time_context = (
+            f"Current date/time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}. "
+        )
+        hour = now.hour
+        greeting_hint = (
+            "It's morning."
+            if hour < 12
+            else "It's afternoon."
+            if hour < 17
+            else "It's evening."
+        )
+
+        enriched_parts = [system_text.rstrip(".") + "."]
+        enriched_parts.append(time_context + greeting_hint)
+        if memory_snippets:
+            enriched_parts.append(
+                "Relevant personal context from memory:\n"
+                + "\n".join(f"- {s}" for s in memory_snippets)
+            )
+        enriched_parts.append(
+            "Keep responses conversational and concise — you are speaking aloud, not writing."
+        )
+        system_text = "\n\n".join(enriched_parts)
+    except Exception as exc:
+        _voice_log.debug("Voice Live: system prompt enrichment failed: %s", exc)
+
+    _voice_log.info(
+        "Voice Live: starting session (voice=%s)", voice_name
+    )
+
+    config = types.LiveConnectConfig(
+        response_modalities=[types.Modality.AUDIO],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=voice_name
+                )
+            )
+        ),
+        system_instruction=types.Content(
+            parts=[types.Part(text=system_text)]
+        ),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow(),
+        ),
+    )
+
+    client = genai.Client(api_key=api_key)
+    model = "gemini-2.5-flash-native-audio-latest"
+
+    try:
+        async with client.aio.live.connect(
+            model=model, config=config
+        ) as session:
+            await websocket.send_json({"type": "ready"})
+            _voice_log.info("Voice Live: Gemini session ready")
+
+            # --- Forward browser audio → Gemini ---
+            async def forward_to_gemini() -> None:
+                try:
+                    while True:
+                        msg = await websocket.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            break
+                        if msg.get("bytes"):
+                            await session.send_realtime_input(
+                                audio=types.Blob(
+                                    data=msg["bytes"],
+                                    mime_type="audio/pcm;rate=16000",
+                                )
+                            )
+                except WebSocketDisconnect:
+                    pass
+
+            # --- Forward Gemini audio/transcripts → browser ---
+            async def forward_from_gemini() -> None:
+                try:
+                    while True:
+                        async for response in session.receive():
+                            sc = response.server_content
+                            if sc is None:
+                                continue
+
+                            if sc.model_turn:
+                                for part in sc.model_turn.parts:
+                                    if part.inline_data and part.inline_data.data:
+                                        await websocket.send_bytes(
+                                            part.inline_data.data
+                                        )
+
+                            if (
+                                hasattr(sc, "input_transcription")
+                                and sc.input_transcription
+                                and sc.input_transcription.text
+                            ):
+                                await websocket.send_json(
+                                    {
+                                        "type": "user_transcript",
+                                        "text": sc.input_transcription.text,
+                                    }
+                                )
+                            if (
+                                hasattr(sc, "output_transcription")
+                                and sc.output_transcription
+                                and sc.output_transcription.text
+                            ):
+                                await websocket.send_json(
+                                    {
+                                        "type": "assistant_transcript",
+                                        "text": sc.output_transcription.text,
+                                    }
+                                )
+                            if sc.interrupted:
+                                await websocket.send_json({"type": "interrupted"})
+                            if sc.turn_complete:
+                                await websocket.send_json({"type": "turn_complete"})
+                        _voice_log.debug("Voice Live: receive() iterator ended, re-entering")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    _voice_log.error("Voice Live: Gemini receive error: %s", exc)
+
+            fwd_task = asyncio.create_task(forward_to_gemini())
+            recv_task = asyncio.create_task(forward_from_gemini())
+            try:
+                done, pending = await asyncio.wait(
+                    [fwd_task, recv_task], return_when=asyncio.FIRST_COMPLETED
+                )
+                for t in pending:
+                    t.cancel()
+            finally:
+                fwd_task.cancel()
+                recv_task.cancel()
+
+    except WebSocketDisconnect:
+        _voice_log.info("Voice Live: client disconnected")
+    except Exception as exc:
+        _voice_log.error("Voice Live: session error: %s", exc)
+        try:
+            await websocket.send_json(
+                {"type": "error", "detail": str(exc)}
+            )
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        _voice_log.info("Voice Live: session ended")
+
+
 # ---- Feedback routes ----
 
 feedback_router = APIRouter(prefix="/v1/feedback", tags=["feedback"])
@@ -894,6 +1237,7 @@ def include_all_routes(app) -> None:
     app.include_router(websocket_router)
     app.include_router(learning_router)
     app.include_router(speech_router)
+    app.include_router(voice_router)
     app.include_router(feedback_router)
     app.include_router(optimize_router)
 
@@ -943,6 +1287,7 @@ __all__ = [
     "websocket_router",
     "learning_router",
     "speech_router",
+    "voice_router",
     "feedback_router",
     "optimize_router",
 ]

@@ -18,7 +18,10 @@ COPY src/ src/
 COPY --from=frontend /src/openjarvis/server/static src/openjarvis/server/static/
 
 RUN pip install --no-cache-dir uv && \
-    uv pip install --system ".[server,speech]"
+    uv pip install --system ".[server,speech,inference-google]" && \
+    uv pip install --system --no-deps openwakeword>=0.6 && \
+    uv pip install --system onnxruntime>=1.16 scikit-learn scipy tqdm requests && \
+    python -c "from openwakeword.utils import download_models; download_models()"
 
 # Stage 3: Runtime
 FROM python:3.12-slim-bookworm
