@@ -11,6 +11,7 @@ services:
     volumes:
       - ~/.openjarvis/docker-config.toml:/root/.openjarvis/config.toml:ro
       - openjarvis-data:/root/.openjarvis/data
+      - openjarvis-db:/root/.openjarvis/db
     environment:
       - OPENJARVIS_ENGINE_DEFAULT=ollama
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -28,3 +29,4 @@ services:
 
 volumes:
   openjarvis-data:
+  openjarvis-db:
