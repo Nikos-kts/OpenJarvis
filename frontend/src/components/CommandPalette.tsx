@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
-import { Search, Cpu, X, Download, Loader2, Trash2, Check, Cloud, Key, Eye, EyeOff } from 'lucide-react';
+import { Check, Cloud, Cpu, Download, Eye, EyeOff, Key, Loader2, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { deleteModel, fetchModels, isTauri, preloadModel, pullModel } from '../lib/api';
 import { useAppStore } from '../lib/store';
-import { pullModel, deleteModel, fetchModels, preloadModel, isTauri } from '../lib/api';
 
 /** Popular models that users can download from the catalogue. */
 const CATALOGUE_MODELS = [
@@ -77,7 +77,7 @@ function setStoredKey(storageKey: string, value: string): void {
   try {
     if (value) localStorage.setItem(storageKey, value);
     else localStorage.removeItem(storageKey);
-  } catch {}
+  } catch { }
 }
 
 type Tab = 'installed' | 'catalogue' | 'cloud';
@@ -109,14 +109,14 @@ export function CommandPalette() {
 
   const filtered = tab === 'installed'
     ? (query
-        ? models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase()))
-        : models)
+      ? models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase()))
+      : models)
     : tab === 'catalogue'
-    ? CATALOGUE_MODELS.filter((m) =>
+      ? CATALOGUE_MODELS.filter((m) =>
         !installedIds.has(m.id) &&
         (!query || m.id.toLowerCase().includes(query.toLowerCase()) || m.desc.toLowerCase().includes(query.toLowerCase()))
       )
-    : []; // cloud tab doesn't use filtered
+      : []; // cloud tab doesn't use filtered
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -158,7 +158,7 @@ export function CommandPalette() {
     try {
       const m = await fetchModels();
       setModels(m);
-    } catch {}
+    } catch { }
   };
 
   const handlePull = async (modelId: string) => {
@@ -197,7 +197,7 @@ export function CommandPalette() {
         const remaining = models.filter((m) => m.id !== modelId);
         if (remaining.length > 0) setSelectedModel(remaining[0].id);
       }
-    } catch {} finally {
+    } catch { } finally {
       setDeleting(null);
     }
   };
@@ -218,7 +218,7 @@ export function CommandPalette() {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('save_cloud_key', { keyName: provider.envKey, keyValue: value });
-      } catch {}
+      } catch { }
     } else {
       try {
         await fetch('/v1/cloud/keys', {
@@ -226,7 +226,7 @@ export function CommandPalette() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: provider.envKey, value }),
         });
-      } catch {}
+      } catch { }
     }
 
     useAppStore.getState().addLogEntry({
@@ -408,8 +408,8 @@ export function CommandPalette() {
                       }}
                     >
                       {isPulling ? <><Loader2 size={12} className="animate-spin" /> Downloading...</> :
-                       justInstalled ? <><Check size={12} /> Installed</> :
-                       <><Download size={12} /> Download</>}
+                        justInstalled ? <><Check size={12} /> Installed</> :
+                          <><Download size={12} /> Download</>}
                     </button>
                   </div>
                 );
