@@ -103,10 +103,26 @@ def serve(
     sec = setup_security(config, engine, bus)
     engine = sec.engine
 
+    # Load persisted credentials into os.environ so all endpoints see them.
+    import os
+    from pathlib import Path
+
+    # 1. cloud-keys.env (cloud provider API keys)
+    _cloud_keys_path = Path.home() / ".openjarvis" / "cloud-keys.env"
+    if _cloud_keys_path.exists():
+        for _raw in _cloud_keys_path.read_text().splitlines():
+            _line = _raw.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
+    # 2. credentials.toml (tool/channel credentials)
+    from openjarvis.core.credentials import inject_credentials
+
+    inject_credentials()
+
     # If cloud API keys are set, wrap with MultiEngine so both local
     # and cloud models appear in the model list and can be used.
-    import os
-
     _has_cloud = (
         os.environ.get("OPENAI_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")

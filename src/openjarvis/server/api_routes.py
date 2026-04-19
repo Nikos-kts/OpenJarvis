@@ -152,7 +152,7 @@ async def message_agent(agent_id: str, req: AgentMessageRequest, request: Reques
 memory_router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
 
-def _get_memory_backend(request: Request):
+def _get_memory_backend(request):
     """Return the app-level memory backend, falling back to a fresh SQLiteMemory."""
     backend = getattr(request.app.state, "memory_backend", None)
     if backend is None:
@@ -878,6 +878,13 @@ voice_router = APIRouter(prefix="/v1/voice", tags=["voice"])
 
 _voice_log = logging.getLogger("uvicorn.error")
 
+_ALLOWED_LIVE_MODELS = frozenset({
+    "gemini-2.5-flash-native-audio-latest",
+    "gemini-2.5-flash-native-audio-preview-12-2025",
+    "gemini-2.5-flash-native-audio-preview-09-2025",
+    "gemini-3.1-flash-live-preview",
+})
+
 
 @voice_router.get("/live/health")
 async def voice_live_health():
@@ -938,6 +945,7 @@ async def voice_live_stream(websocket: WebSocket):
     # Wait for optional config message (voice, system instruction)
     voice_name = "Kore"
     system_text = "You are Jarvis, a helpful and concise AI assistant."
+    live_model = "gemini-2.5-flash-native-audio-latest"
 
     try:
         first_msg = await asyncio.wait_for(websocket.receive(), timeout=2.0)
@@ -948,6 +956,9 @@ async def voice_live_stream(websocket: WebSocket):
             if cfg.get("type") == "config":
                 voice_name = cfg.get("voice", voice_name)
                 system_text = cfg.get("system", system_text)
+                requested_model = cfg.get("model", "")
+                if requested_model in _ALLOWED_LIVE_MODELS:
+                    live_model = requested_model
     except (asyncio.TimeoutError, Exception):
         # No config message — use defaults
         pass
@@ -999,7 +1010,9 @@ async def voice_live_stream(websocket: WebSocket):
         _voice_log.debug("Voice Live: system prompt enrichment failed: %s", exc)
 
     _voice_log.info(
-        "Voice Live: starting session (voice=%s)", voice_name
+        "Voice Live: starting session (voice=%s, model=%s)",
+        voice_name,
+        live_model,
     )
 
     config = types.LiveConnectConfig(
@@ -1022,11 +1035,10 @@ async def voice_live_stream(websocket: WebSocket):
     )
 
     client = genai.Client(api_key=api_key)
-    model = "gemini-2.5-flash-native-audio-latest"
 
     try:
         async with client.aio.live.connect(
-            model=model, config=config
+            model=live_model, config=config
         ) as session:
             await websocket.send_json({"type": "ready"})
             _voice_log.info("Voice Live: Gemini session ready")
@@ -1053,6 +1065,16 @@ async def voice_live_stream(websocket: WebSocket):
                 try:
                     while True:
                         async for response in session.receive():
+                            # Handle go_away (server requesting session end)
+                            if response.go_away:
+                                _voice_log.info("Voice Live: server sent go_away")
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "detail": "Server requested session end."
+                                    " Please reconnect.",
+                                })
+                                return
+
                             sc = response.server_content
                             if sc is None:
                                 continue
@@ -1095,6 +1117,12 @@ async def voice_live_stream(websocket: WebSocket):
                     raise
                 except Exception as exc:
                     _voice_log.error("Voice Live: Gemini receive error: %s", exc)
+                    try:
+                        await websocket.send_json(
+                            {"type": "error", "detail": f"Gemini session error: {exc}"}
+                        )
+                    except Exception:
+                        pass
 
             fwd_task = asyncio.create_task(forward_to_gemini())
             recv_task = asyncio.create_task(forward_from_gemini())

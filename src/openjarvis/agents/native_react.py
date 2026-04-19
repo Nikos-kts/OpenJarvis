@@ -71,6 +71,7 @@ class NativeReActAgent(ToolUsingAgent):
         interactive: bool = False,
         confirm_callback=None,
         skill_few_shot_examples: Optional[List[str]] = None,
+        system_prompt: Optional[str] = None,
     ) -> None:
         super().__init__(
             engine,
@@ -84,6 +85,7 @@ class NativeReActAgent(ToolUsingAgent):
             confirm_callback=confirm_callback,
             skill_few_shot_examples=skill_few_shot_examples,
         )
+        self._custom_system_prompt = system_prompt
 
     def _parse_response(self, text: str) -> dict:
         """Parse ReAct structured output."""
@@ -147,6 +149,8 @@ class NativeReActAgent(ToolUsingAgent):
             tool_descriptions=tool_desc,
             skill_examples=skill_examples_block,
         )
+        if self._custom_system_prompt:
+            system_prompt = self._custom_system_prompt + "\n\n" + system_prompt
 
         messages = self._build_messages(input, context, system_prompt=system_prompt)
 

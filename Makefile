@@ -1,54 +1,60 @@
-COMPOSE := docker compose -f docker-compose.mac.yml
 URL     := http://localhost:8000
 API     := curl -sf $(URL)
 FMT     := python3 -m json.tool 2>/dev/null
+UV      := source $$HOME/.local/bin/env 2>/dev/null; uv
 
-.PHONY: start stop restart build rebuild logs status health shell \
+.PHONY: install build start stop restart logs status health \
         info models agents sessions memory skills traces channels \
         connectors telemetry energy savings budget voice-health \
         security chat ollama-check check help
 
-## start        – start Jarvis (existing image)
-start:
-	$(COMPOSE) up -d
-	@echo "Jarvis started → $(URL)"
+## ── Setup ────────────────────────────────────────────────────
 
-## stop         – stop Jarvis
-stop:
-	$(COMPOSE) down
-	@echo "Jarvis stopped."
+## install      – install Python + frontend deps locally
+install:
+	@echo "Installing Python deps..."
+	$(UV) sync --extra server --extra inference-google --extra inference-cloud --extra memory-faiss --extra speech --extra scheduler --extra tools-search --extra dev
+	@echo "Installing frontend deps..."
+	cd frontend && npm install
+	@echo "Done."
 
-## restart      – restart the container
-restart:
-	$(COMPOSE) restart
-	@echo "Jarvis restarted → $(URL)"
-
-## build        – build image and start
+## build        – build frontend for production (into static/)
 build:
-	$(COMPOSE) up -d --build
-	@echo "Jarvis built and started → $(URL)"
+	cd frontend && npm run build
 
-## rebuild      – full rebuild (no cache) and start
-rebuild:
-	$(COMPOSE) build --no-cache
-	$(COMPOSE) up -d
-	@echo "Jarvis rebuilt and started → $(URL)"
+## ── Run ──────────────────────────────────────────────────────
 
-## logs         – tail container logs (LINES=100)
+## start        – start backend + frontend (Ctrl+C to stop)
+start:
+	@echo "Starting OpenJarvis natively..."
+	@(cd frontend && npm run dev) &
+	$(UV) run jarvis serve --port 8000
+	@echo "Stopped."
+
+## stop         – stop any running processes on ports 8000/5173
+stop:
+	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+	@lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+	@echo "Stopped."
+
+## restart      – stop then start
+restart: stop
+	@sleep 1
+	@$(MAKE) start
+
+## logs         – tail server logs (follow mode)
 logs:
-	$(COMPOSE) logs -f --tail=$(or $(LINES),100)
+	@tail -f ~/.openjarvis/logs/server.log 2>/dev/null || echo "No log file found — server writes to stdout by default"
 
-## status       – show container status
+## status       – show running Jarvis processes
 status:
-	$(COMPOSE) ps
+	@echo "Port 8000 (backend):" && lsof -ti :8000 2>/dev/null && echo "  running" || echo "  not running"; \
+	 echo "Port 5173 (frontend):" && lsof -ti :5173 2>/dev/null && echo "  running" || echo "  not running"; \
+	 echo "Ollama:" && lsof -ti :11434 2>/dev/null && echo "  running" || echo "  not running"
 
 ## health       – quick health check
 health:
 	@$(API)/health | $(FMT) || echo "Jarvis is not responding"
-
-## shell        – open a shell inside the container
-shell:
-	$(COMPOSE) exec jarvis bash
 
 ## ── Diagnostics ──────────────────────────────────────────────
 
@@ -113,12 +119,11 @@ voice-health:
 security:
 	@$(API)/v1/security/scan | $(FMT)
 
-## ollama-check – verify Ollama is reachable from Docker
+## ollama-check – verify Ollama is reachable
 ollama-check:
-	@echo "Host:" && curl -sf http://localhost:11434/api/tags | $(FMT) | head -5 || echo "  Ollama not running on host"; \
-	 echo "Docker:" && $(COMPOSE) exec jarvis python3 -c \
-	   "import urllib.request,json; r=urllib.request.urlopen('http://host.docker.internal:11434/api/tags'); d=json.loads(r.read()); print('  Models:', ', '.join(m['name'] for m in d['models']))" \
-	   2>/dev/null || echo "  Cannot reach Ollama from container"
+	@curl -sf http://localhost:11434/api/tags | python3 -c \
+	  "import sys,json; d=json.load(sys.stdin); print('Models:', ', '.join(m['name'] for m in d['models']))" \
+	  2>/dev/null || echo "Ollama not running"
 
 ## check        – full system check (health + engine + models + agents)
 check:

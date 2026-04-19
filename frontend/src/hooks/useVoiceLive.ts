@@ -19,6 +19,8 @@ export type VoiceLiveState = 'idle' | 'connecting' | 'active';
 interface UseVoiceLiveOptions {
     /** Gemini voice persona */
     voice?: string;
+    /** Gemini Live model identifier */
+    model?: string;
     /** Called with each chunk of user transcript */
     onUserTranscript?: (text: string) => void;
     /** Called with each chunk of assistant transcript */
@@ -122,7 +124,7 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
      * server sends "ready". The channel stays open until disconnect().
      */
     const connect = useCallback(
-        async (voice?: string) => {
+        async (voice?: string, model?: string) => {
             if (wsRef.current) return;
 
             setState('connecting');
@@ -153,6 +155,7 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
                     JSON.stringify({
                         type: 'config',
                         voice: voice || optsRef.current.voice || 'Kore',
+                        model: model || optsRef.current.model || 'gemini-2.5-flash-native-audio-latest',
                         system: 'You are Jarvis, a helpful and concise AI assistant.',
                     }),
                 );

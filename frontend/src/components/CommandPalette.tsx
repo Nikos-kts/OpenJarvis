@@ -213,11 +213,19 @@ export function CommandPalette() {
     setStoredKey(provider.storageKey, value);
     setApiKeys((prev) => ({ ...prev, [provider.storageKey]: value }));
 
-    // Also save to Tauri backend so the server process picks up the key
+    // Persist key to server so backend processes pick it up
     if (isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('save_cloud_key', { keyName: provider.envKey, keyValue: value });
+      } catch {}
+    } else {
+      try {
+        await fetch('/v1/cloud/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: provider.envKey, value }),
+        });
       } catch {}
     }
 

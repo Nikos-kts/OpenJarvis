@@ -536,6 +536,71 @@ async def delete_model(model_name: str, request: Request):
     return {"status": "deleted", "model": model_name}
 
 
+_ALLOWED_CLOUD_KEYS = frozenset({
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MINIMAX_API_KEY",
+})
+
+
+@router.post("/v1/cloud/keys")
+async def save_cloud_key(request: Request):
+    """Persist a cloud API key to ~/.openjarvis/cloud-keys.env.
+
+    Body: ``{"key": "GEMINI_API_KEY", "value": "AI..."}``
+    Omit *value* or pass empty string to remove the key.
+    """
+    import os
+    from pathlib import Path
+
+    body = await request.json()
+    key_name = body.get("key", "").strip()
+    key_value = body.get("value", "").strip()
+
+    if key_name not in _ALLOWED_CLOUD_KEYS:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Unknown key name: {key_name}"},
+        )
+
+    keys_path = Path.home() / ".openjarvis" / "cloud-keys.env"
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Read existing keys
+    existing: dict[str, str] = {}
+    if keys_path.exists():
+        for raw_line in keys_path.read_text().splitlines():
+            line = raw_line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                existing[k.strip()] = v.strip()
+
+    # Update
+    if key_value:
+        existing[key_name] = key_value
+        os.environ[key_name] = key_value
+    else:
+        existing.pop(key_name, None)
+        os.environ.pop(key_name, None)
+
+    # Write back
+    lines = [f"{k}={v}" for k, v in sorted(existing.items())]
+    keys_path.write_text("\n".join(lines) + "\n")
+    os.chmod(keys_path, 0o600)
+
+    # Trigger cloud engine reload so the new key takes effect immediately.
+    try:
+        await reload_cloud_engine(request)
+    except Exception:
+        pass
+
+    return {"status": "ok", "key": key_name, "saved": bool(key_value)}
+
+
 @router.post("/v1/cloud/reload")
 async def reload_cloud_engine(request: Request):
     """Hot-reload cloud API keys and (re-)initialize the cloud engine.

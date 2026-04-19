@@ -14,6 +14,7 @@ import { generateId, useAppStore } from '../lib/store';
 export function VoicePanel() {
     const speechEnabled = useAppStore((s) => s.settings.speechEnabled);
     const liveVoice = useAppStore((s) => s.settings.liveVoice);
+    const liveModel = useAppStore((s) => s.settings.liveModel);
     const selectedModel = useAppStore((s) => s.selectedModel);
     const createConversation = useAppStore((s) => s.createConversation);
     const addMessage = useAppStore((s) => s.addMessage);
@@ -80,6 +81,7 @@ export function VoicePanel() {
         unmute,
     } = useVoiceLive({
         voice: liveVoice,
+        model: liveModel,
         onUserTranscript: (text) => { fullUserTextRef.current += text; },
         onAssistantTranscript: (text) => { fullAssistantTextRef.current += text; },
         onTurnComplete: () => { flushTurn(); },
@@ -93,9 +95,9 @@ export function VoicePanel() {
             disconnect();
             flushTurn();
         } else {
-            connect(liveVoice);
+            connect(liveVoice, liveModel);
         }
-    }, [state, connect, disconnect, liveVoice, flushTurn]);
+    }, [state, connect, disconnect, liveVoice, liveModel, flushTurn]);
 
     const handleMicToggle = useCallback(() => {
         if (muted) {

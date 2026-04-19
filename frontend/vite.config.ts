@@ -1,7 +1,7 @@
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
@@ -51,8 +51,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/v1': process.env.VITE_API_URL || 'http://localhost:8000',
-      '/health': process.env.VITE_API_URL || 'http://localhost:8000',
+      '/v1': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        ws: true,
+      },
+      '/health': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+      },
     },
   },
 });
