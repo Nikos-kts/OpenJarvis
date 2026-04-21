@@ -4,13 +4,14 @@ import {
   Download,
   Monitor,
   Moon,
+  Sparkles,
   Sun,
   Trash2,
   Upload
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { WakeModeStatus } from '../lib/api';
-import { checkHealth, fetchSpeechHealth, fetchWakeMode, getMemoryStats, updateWakeMode } from '../lib/api';
+import { Link } from 'react-router';
+import { checkHealth, getMemoryStats } from '../lib/api';
 import { useAppStore, type ThemeMode } from '../lib/store';
 
 function OllamaModelList() {
@@ -112,7 +113,6 @@ export function SettingsPage() {
   const conversations = useAppStore((s) => s.conversations);
   const serverInfo = useAppStore((s) => s.serverInfo);
   const [healthy, setHealthy] = useState<boolean | null>(null);
-  const [speechBackendAvailable, setSpeechBackendAvailable] = useState<boolean | null>(null);
   const [saved, setSaved] = useState(false);
 
   const [memoryStats, setMemoryStats] = useState<{ entries: number; backend: string } | null>(null);
@@ -132,23 +132,11 @@ export function SettingsPage() {
     try { return parseInt(localStorage.getItem('openjarvis-memory-max-tokens') || '2048'); } catch { return 2048; }
   });
 
-  const [wakeMode, setWakeMode] = useState<WakeModeStatus['mode']>('clap');
-  const [wakeAutoDelay, setWakeAutoDelay] = useState(5);
-  const [wakeTtsModel, setWakeTtsModel] = useState('gemini-2.5-flash-preview-tts');
-  const [wakeTtsModels, setWakeTtsModels] = useState<string[]>([]);
-  const [wakePlaybackSpeed, setWakePlaybackSpeed] = useState(1.0);
-
   useEffect(() => {
     checkHealth().then(setHealthy);
-    fetchSpeechHealth()
-      .then((h) => setSpeechBackendAvailable(h.available))
-      .catch(() => setSpeechBackendAvailable(false));
     getMemoryStats()
       .then(setMemoryStats)
       .catch(() => setMemoryStats(null));
-    fetchWakeMode()
-      .then((s) => { setWakeMode(s.mode); setWakeAutoDelay(s.auto_delay); setWakeTtsModel(s.tts_model); setWakeTtsModels(s.tts_models || []); setWakePlaybackSpeed(s.playback_speed ?? 1.0); })
-      .catch(() => { });
   }, []);
 
   const showSaved = () => {
@@ -468,283 +456,21 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Speech */}
-          <Section title="Speech">
-            <div className="mt-1 mb-2">
-              <h4 className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Core
-              </h4>
-            </div>
-            <SettingRow label="Enable Voice" description="Shows voice controls in chat and lets Jarvis use microphone input.">
-              <button
-                onClick={() => { updateSettings({ speechEnabled: !settings.speechEnabled }); showSaved(); }}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
-                style={{
-                  background: settings.speechEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                }}
-              >
-                <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
-                  style={{
-                    transform: settings.speechEnabled ? 'translateX(20px)' : 'translateX(0)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }}
-                />
-              </button>
-            </SettingRow>
-            <SettingRow label="Backend status" description="Requires Whisper, Deepgram, or another speech backend">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{
-                    background: speechBackendAvailable === true ? 'var(--color-success)'
-                      : speechBackendAvailable === false ? 'var(--color-text-tertiary)'
-                        : 'var(--color-text-tertiary)',
-                  }}
-                />
-                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {speechBackendAvailable === null ? 'Checking...'
-                    : speechBackendAvailable ? 'Available'
-                      : 'Not configured'}
-                </span>
+          {/* Voice, wake, persona (moved to Jarvis tab) */}
+          <Section title="Voice &amp; Wake">
+            <div className="flex items-start gap-3 p-4 rounded-lg" style={{ background: 'var(--color-accent-subtle)', border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)' }}>
+              <Sparkles size={18} style={{ color: 'var(--color-accent)', flexShrink: 0, marginTop: 2 }} />
+              <div className="flex-1">
+                <div className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Configure Jarvis voice, wake-up, and persona</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                  Voice persona, TTS model, wake mode, wake phrase, and system prompt are part of Jarvis&apos; own configuration and persist in the backend.
+                </div>
+                <Link to="/jarvis" className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium" style={{ color: 'var(--color-accent)' }}>
+                  Open Jarvis tab →
+                </Link>
               </div>
-            </SettingRow>
-            {!speechBackendAvailable && speechBackendAvailable !== null && (
-              <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                Set up a speech backend to use voice input.
-                See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
-              </div>
-            )}
-
-            <div className="mt-4 mb-2 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-              <h4 className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Runtime Routing
-              </h4>
-            </div>
-            <SettingRow label="Voice mode" description="Gemini uses one bidirectional native-audio model for listening + speaking. Engine uses Gemini STT + local Jarvis + configurable TTS.">
-              <select
-                value={settings.voiceMode || 'engine'}
-                onChange={(e) => { updateSettings({ voiceMode: e.target.value as 'gemini' | 'engine' }); showSaved(); }}
-                disabled={!settings.speechEnabled}
-                className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
-                style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-              >
-                <option value="gemini">Gemini (direct audio)</option>
-                <option value="engine">Engine (STT → brain → TTS)</option>
-              </select>
-            </SettingRow>
-            {settings.voiceMode === 'gemini' ? (
-              <>
-                <SettingRow label="Dialog model" description="Single bidirectional Gemini Native Audio Dialog model for both listening and speaking.">
-                  <select
-                    value={settings.liveModel || 'gemini-2.5-flash-native-audio-latest'}
-                    onChange={(e) => { updateSettings({ liveModel: e.target.value }); showSaved(); }}
-                    disabled={!settings.speechEnabled}
-                    className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
-                    style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                  >
-                    <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
-                    <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
-                    <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
-                    <option value="gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview</option>
-                  </select>
-                </SettingRow>
-              </>
-            ) : (
-              <>
-                <SettingRow label="Engine model" description="Local model Jarvis uses for reasoning and actions in Engine mode.">
-                  <input
-                    type="text"
-                    placeholder="e.g. qwen2.5:7b (empty = server default)"
-                    value={settings.voiceEngineModel || ''}
-                    onChange={(e) => { updateSettings({ voiceEngineModel: e.target.value }); showSaved(); }}
-                    disabled={!settings.speechEnabled}
-                    className="text-xs rounded-lg px-2 py-1.5 outline-none disabled:opacity-40"
-                    style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)', width: '240px' }}
-                  />
-                </SettingRow>
-                <SettingRow label="STT model" description="Gemini Live model used to transcribe your speech into text for Jarvis.">
-                  <select
-                    value={settings.voiceEngineSttModel || 'gemini-2.5-flash-native-audio-latest'}
-                    onChange={(e) => { updateSettings({ voiceEngineSttModel: e.target.value }); showSaved(); }}
-                    disabled={!settings.speechEnabled}
-                    className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
-                    style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                  >
-                    <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
-                    <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
-                    <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
-                    <option value="gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview</option>
-                  </select>
-                </SettingRow>
-                <SettingRow label="TTS strategy" description="How Jarvis turns text back into audio in Engine mode.">
-                  <select
-                    value={settings.voiceEngineTtsMode || 'native-audio-repeat'}
-                    onChange={(e) => { updateSettings({ voiceEngineTtsMode: e.target.value as 'gemini-tts' | 'native-audio-repeat' | 'browser-fallback' }); showSaved(); }}
-                    disabled={!settings.speechEnabled}
-                    className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
-                    style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                  >
-                    <option value="native-audio-repeat">Gemini Native Audio Repeat (recommended)</option>
-                    <option value="gemini-tts">Gemini TTS model</option>
-                    <option value="browser-fallback">Browser speechSynthesis (local fallback)</option>
-                  </select>
-                </SettingRow>
-                {settings.voiceEngineTtsMode === 'gemini-tts' && (
-                  <SettingRow label="TTS model" description="Gemini model used when TTS strategy is Gemini TTS.">
-                    <input
-                      type="text"
-                      placeholder="e.g. gemini-2.5-flash-preview-tts"
-                      value={settings.voiceEngineTtsModel || 'gemini-2.5-flash-preview-tts'}
-                      onChange={(e) => { updateSettings({ voiceEngineTtsModel: e.target.value }); showSaved(); }}
-                      disabled={!settings.speechEnabled}
-                      className="text-xs rounded-lg px-2 py-1.5 outline-none disabled:opacity-40"
-                      style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)', width: '260px' }}
-                    />
-                  </SettingRow>
-                )}
-              </>
-            )}
-
-            <div className="mt-4 mb-2 pt-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-              <h4 className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Voice Quality
-              </h4>
-            </div>
-            <SettingRow label="Voice" description="Speaker style for Jarvis audio replies (TTS voice persona).">
-              <select
-                value={settings.liveVoice || 'Kore'}
-                onChange={(e) => { updateSettings({ liveVoice: e.target.value }); showSaved(); }}
-                disabled={!settings.speechEnabled}
-                className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer disabled:opacity-40"
-                style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-              >
-                <option value="Kore">Kore (warm, female)</option>
-                <option value="Puck">Puck (upbeat, male)</option>
-                <option value="Charon">Charon (deep, male)</option>
-                <option value="Fenrir">Fenrir (bold, male)</option>
-                <option value="Aoede">Aoede (clear, female)</option>
-                <option value="Leda">Leda (gentle, female)</option>
-                <option value="Orus">Orus (steady, male)</option>
-                <option value="Zephyr">Zephyr (bright, neutral)</option>
-              </select>
-            </SettingRow>
-            <SettingRow label="Playback speed" description={`${(settings.voicePlaybackSpeed || 1.0).toFixed(1)}x reply speed`}>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2.0}
-                  step={0.1}
-                  value={settings.voicePlaybackSpeed || 1.0}
-                  onChange={(e) => { updateSettings({ voicePlaybackSpeed: parseFloat(e.target.value) }); showSaved(); }}
-                  disabled={!settings.speechEnabled}
-                  className="w-28 cursor-pointer accent-[var(--color-accent)] disabled:opacity-40"
-                />
-                <span className="text-xs w-8 text-right" style={{ color: 'var(--color-text-secondary)' }}>
-                  {(settings.voicePlaybackSpeed || 1.0).toFixed(1)}x
-                </span>
-              </div>
-            </SettingRow>
-
-            {/* Jarvis Wake-Up */}
-            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
-              <h4 className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Jarvis Wake-Up
-              </h4>
-              <SettingRow label="Wake mode" description="How Jarvis activates after the backend starts. In clap mode, double clap wakes Jarvis and triple clap quits the desktop app.">
-                <select
-                  value={wakeMode}
-                  onChange={(e) => {
-                    const mode = e.target.value as WakeModeStatus['mode'];
-                    setWakeMode(mode);
-                    updateWakeMode(mode, wakeAutoDelay).catch(() => { });
-                    showSaved();
-                  }}
-                  className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer"
-                  style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                >
-                  <option value="clap">Clap Control</option>
-                  <option value="auto">Auto (after startup)</option>
-                  <option value="off">Off</option>
-                </select>
-              </SettingRow>
-              {wakeMode === 'auto' && (
-                <SettingRow label="Startup delay" description={`Wait ${wakeAutoDelay}s before activating Jarvis`}>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={60}
-                      step={1}
-                      value={wakeAutoDelay}
-                      onChange={(e) => {
-                        const delay = parseInt(e.target.value);
-                        setWakeAutoDelay(delay);
-                      }}
-                      onMouseUp={() => {
-                        updateWakeMode(wakeMode, wakeAutoDelay).catch(() => { });
-                        showSaved();
-                      }}
-                      onTouchEnd={() => {
-                        updateWakeMode(wakeMode, wakeAutoDelay).catch(() => { });
-                        showSaved();
-                      }}
-                      className="w-24 accent-blue-500"
-                    />
-                    <span className="text-xs w-8 text-right" style={{ color: 'var(--color-text-secondary)' }}>{wakeAutoDelay}s</span>
-                  </div>
-                </SettingRow>
-              )}
-              {(wakeMode === 'clap' || wakeMode === 'auto') && (
-                <>
-                  <SettingRow label="TTS model" description="Gemini model used for the voice briefing">
-                    <select
-                      value={wakeTtsModel}
-                      onChange={(e) => {
-                        const model = e.target.value;
-                        setWakeTtsModel(model);
-                        updateWakeMode(wakeMode, wakeAutoDelay, model).catch(() => { });
-                        showSaved();
-                      }}
-                      className="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer"
-                      style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                    >
-                      {wakeTtsModels.length > 0
-                        ? wakeTtsModels.map((m) => <option key={m} value={m}>{m}</option>)
-                        : <option value={wakeTtsModel}>{wakeTtsModel}</option>
-                      }
-                    </select>
-                  </SettingRow>
-                  <SettingRow label="Playback speed" description={`${wakePlaybackSpeed.toFixed(1)}x speech rate`}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2.0}
-                        step={0.1}
-                        value={wakePlaybackSpeed}
-                        onChange={(e) => {
-                          setWakePlaybackSpeed(parseFloat(e.target.value));
-                        }}
-                        onMouseUp={() => {
-                          updateWakeMode(wakeMode, wakeAutoDelay, undefined, wakePlaybackSpeed).catch(() => { });
-                          showSaved();
-                        }}
-                        onTouchEnd={() => {
-                          updateWakeMode(wakeMode, wakeAutoDelay, undefined, wakePlaybackSpeed).catch(() => { });
-                          showSaved();
-                        }}
-                        className="w-24 accent-blue-500"
-                      />
-                      <span className="text-xs w-8 text-right" style={{ color: 'var(--color-text-secondary)' }}>{wakePlaybackSpeed.toFixed(1)}x</span>
-                    </div>
-                  </SettingRow>
-                </>
-              )}
             </div>
           </Section>
-
           {/* Data */}
           <Section title="Data">
             <SettingRow label="Conversations" description={`${conversations.length} stored locally`}>
