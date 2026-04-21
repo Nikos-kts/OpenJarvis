@@ -35,6 +35,8 @@ allow = [
   "file_read",
   "calculator",
   "think",
+  "list_available_agents",
+  "delegate_to_agent",
 ]
 
 [intent]

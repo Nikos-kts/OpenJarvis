@@ -35,6 +35,8 @@ _DEFAULT_JARVIS_TOOLS = [
     "file_read",
     "calculator",
     "think",
+    "list_available_agents",
+    "delegate_to_agent",
 ]
 _JARVIS_AGENT_TYPE = "jarvis"
 

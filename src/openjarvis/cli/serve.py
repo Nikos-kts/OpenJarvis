@@ -398,6 +398,22 @@ def serve(
         except Exception as exc:
             logger.debug("Jarvis agent auto-bootstrap failed: %s", exc)
 
+    # Wire the delegation context so the delegate_to_agent / list_available_agents
+    # tools can run specialised agents on Jarvis's behalf. Safe to call when the
+    # manager is None — the tools themselves check for a context at execute time.
+    if agent_manager is not None:
+        try:
+            from openjarvis.agents.delegation import set_delegation_context
+
+            set_delegation_context(
+                agent_manager,
+                engine,
+                model_name,
+                event_bus=bus,
+            )
+        except Exception as exc:
+            logger.debug("Delegation context install failed: %s", exc)
+
     # Set up agent scheduler for cron/interval agents
     agent_scheduler = None
     executor = None
