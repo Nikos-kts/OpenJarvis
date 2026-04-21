@@ -15,6 +15,12 @@ export function VoicePanel() {
     const speechEnabled = useAppStore((s) => s.settings.speechEnabled);
     const liveVoice = useAppStore((s) => s.settings.liveVoice);
     const liveModel = useAppStore((s) => s.settings.liveModel);
+    const voiceMode = useAppStore((s) => s.settings.voiceMode);
+    const voiceEngineModel = useAppStore((s) => s.settings.voiceEngineModel);
+    const voiceEngineSttModel = useAppStore((s) => s.settings.voiceEngineSttModel);
+    const voiceEngineTtsMode = useAppStore((s) => s.settings.voiceEngineTtsMode);
+    const voiceEngineTtsModel = useAppStore((s) => s.settings.voiceEngineTtsModel);
+    const voicePlaybackSpeed = useAppStore((s) => s.settings.voicePlaybackSpeed);
     const selectedModel = useAppStore((s) => s.selectedModel);
     const createConversation = useAppStore((s) => s.createConversation);
     const addMessage = useAppStore((s) => s.addMessage);
@@ -82,6 +88,15 @@ export function VoicePanel() {
     } = useVoiceLive({
         voice: liveVoice,
         model: liveModel,
+        mode: voiceMode || 'engine',
+        // Use the dedicated voice engine model setting (empty = server default).
+        // This avoids loading a second Ollama model just because the chat
+        // dropdown has a different model selected.
+        engineModel: voiceEngineModel || undefined,
+        engineSttModel: voiceEngineSttModel || undefined,
+        engineTtsMode: voiceEngineTtsMode || 'native-audio-repeat',
+        engineTtsModel: voiceEngineTtsModel || undefined,
+        playbackSpeed: voicePlaybackSpeed || 1.0,
         onUserTranscript: (text) => { fullUserTextRef.current += text; },
         onAssistantTranscript: (text) => { fullAssistantTextRef.current += text; },
         onTurnComplete: () => { flushTurn(); },

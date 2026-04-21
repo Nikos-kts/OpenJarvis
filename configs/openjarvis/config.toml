@@ -20,7 +20,7 @@ repetition_penalty = 1.0
 # PILLAR 2: Agent — The Agentic Harness
 # ═══════════════════════════════════════════════════════════════
 [agent]
-default_agent = "native_openhands"        # CodeAct-style agent
+default_agent = "jarvis"                  # Custom Jarvis orchestrator agent
 max_turns = 10                            # Up to 10 tool-calling turns
 tools = "code_interpreter,web_search,file_read,calculator,think"
 objective = "Answer questions accurately using available tools"
@@ -108,7 +108,7 @@ db_path = "~/.openjarvis/traces.db"
 [server]
 host = "0.0.0.0"
 port = 8000
-agent = "native_openhands"
+agent = "jarvis"
 
 [security]
 enabled = false                           # Disable for eval (no PII scanning overhead)

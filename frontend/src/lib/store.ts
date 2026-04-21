@@ -73,10 +73,14 @@ interface Settings {
   temperature: number;
   maxTokens: number;
   speechEnabled: boolean;
-  wakeWordEnabled: boolean;
-  wakeWordTimeout: number;
   liveVoice: string;
-  voiceSilenceTimeout: number;
+  liveModel: string;
+  voiceMode: 'gemini' | 'engine';
+  voiceEngineModel: string; // local model for engine-mode voice; empty = server default
+  voiceEngineSttModel: string;
+  voiceEngineTtsMode: 'gemini-tts' | 'native-audio-repeat' | 'browser-fallback';
+  voiceEngineTtsModel: string;
+  voicePlaybackSpeed: number;
 }
 
 function loadSettings(): Settings {
@@ -89,10 +93,14 @@ function loadSettings(): Settings {
     temperature: 0.7,
     maxTokens: 4096,
     speechEnabled: false,
-    wakeWordEnabled: false,
-    wakeWordTimeout: 8,
     liveVoice: 'Kore',
-    voiceSilenceTimeout: 30,
+    liveModel: 'gemini-2.5-flash-native-audio-latest',
+    voiceMode: 'engine',
+    voiceEngineModel: '', // empty = use server default (qwen2.5:7b)
+    voiceEngineSttModel: 'gemini-2.5-flash-native-audio-latest',
+    voiceEngineTtsMode: 'native-audio-repeat',
+    voiceEngineTtsModel: 'gemini-2.5-flash-preview-tts',
+    voicePlaybackSpeed: 1.0,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);

@@ -1,71 +1,70 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Bot,
+  Brain,
+  Check,
+  ChevronLeft,
+  Copy,
+  Database,
+  DollarSign,
+  FileText,
+  ListTodo,
+  MessageSquare,
+  MoreHorizontal,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RefreshCw,
+  Send,
+  Settings,
+  Trash2,
+  Wifi,
+  X,
+  Zap
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
-import { useAppStore } from '../lib/store';
+import { ToolCallCard } from '../components/Chat/ToolCallCard';
+import type { AgentMessage, AgentTask, AgentTemplate, AgentTrace, ChannelBinding, LearningLogEntry, ManagedAgent, ToolInfo } from '../lib/api';
 import {
-  fetchManagedAgents,
-  fetchAgentTasks,
-  fetchAgentChannels,
   bindAgentChannel,
-  unbindAgentChannel,
-  fetchAgentMessages,
-  fetchTemplates,
   createManagedAgent,
-  pauseManagedAgent,
-  resumeManagedAgent,
   deleteManagedAgent,
-  runManagedAgent,
-  recoverManagedAgent,
-  sendAgentMessage,
-  fetchLearningLog,
-  triggerLearning,
+  fetchAgentChannels,
+  fetchAgentMessages,
+  fetchAgentTasks,
   fetchAgentTraces,
-  fetchManagedAgent,
   fetchAvailableTools,
-  saveToolCredentials,
+  fetchLearningLog,
+  fetchManagedAgent,
+  fetchManagedAgentTokenPolicyRecommendation,
+  fetchManagedAgents,
   fetchModels,
-  updateManagedAgent,
   fetchRecommendedModel,
-  sendblueVerify,
+  fetchTemplates,
+  pauseManagedAgent,
+  recoverManagedAgent,
+  resumeManagedAgent,
+  runManagedAgent,
+  sendAgentMessage,
+  sendblueHealth,
   sendblueRegisterWebhook,
   sendblueTest,
-  sendblueHealth,
+  sendblueVerify,
+  triggerLearning,
+  unbindAgentChannel,
+  updateManagedAgent
 } from '../lib/api';
-import type { AgentTask, ChannelBinding, AgentTemplate, AgentMessage, ManagedAgent, LearningLogEntry, AgentTrace, ToolInfo } from '../lib/api';
+import { connectSource, listConnectors } from '../lib/connectors-api';
+import { useAppStore } from '../lib/store';
 import { useAgentEvents } from '../lib/useAgentEvents';
-import {
-  Plus,
-  Bot,
-  Pause,
-  Play,
-  Trash2,
-  ChevronLeft,
-  ListTodo,
-  Brain,
-  Zap,
-  MoreHorizontal,
-  AlertTriangle,
-  DollarSign,
-  Activity,
-  MessageSquare,
-  Settings,
-  FileText,
-  X,
-  ChevronRight,
-  Send,
-  RefreshCw,
-  Wifi,
-  Database,
-  Copy,
-  Check,
-  Pencil,
-} from 'lucide-react';
-import { SOURCE_CATALOG } from '../types/connectors';
-import type { ConnectRequest } from '../types/connectors';
-import { listConnectors, connectSource } from '../lib/connectors-api';
 import type { ToolCallInfo } from '../types';
-import { ToolCallCard } from '../components/Chat/ToolCallCard';
+import type { ConnectRequest } from '../types/connectors';
+import { SOURCE_CATALOG } from '../types/connectors';
 
 // ---------------------------------------------------------------------------
 // Status helpers
@@ -122,6 +121,21 @@ function StatusDot({ status }: { status: string }) {
 function formatCost(cost?: number): string {
   if (cost === undefined || cost === null) return '—';
   return `$${cost.toFixed(4)}`;
+}
+
+function formatTokenCount(value?: number | null): string {
+  if (value === undefined || value === null) return '—';
+  return value.toLocaleString();
+}
+
+function getGenerationMaxTokens(config: Record<string, unknown> | undefined): number {
+  const value = config?.generation_max_tokens ?? config?.max_tokens;
+  return typeof value === 'number' ? value : Number(value || 0);
+}
+
+function getBudgetMaxTokens(config: Record<string, unknown> | undefined): number {
+  const value = config?.budget_max_tokens;
+  return typeof value === 'number' ? value : Number(value || 0);
 }
 
 function formatRelativeTime(ts?: number | null): string {
@@ -260,6 +274,8 @@ interface WizardState {
   scheduleValue: string;
   selectedTools: string[];
   budget: string;
+  generationMaxTokens: string;
+  budgetMaxTokens: string;
   routerPolicy: string;
   memoryExtraction: string;
   observationCompression: string;
@@ -662,11 +678,14 @@ function LaunchWizard({
     scheduleValue: '',
     selectedTools: [],
     budget: '',
+    generationMaxTokens: '',
+    budgetMaxTokens: '',
     routerPolicy: '',
     ...UNIVERSAL_DEFAULTS,
   });
   const [launching, setLaunching] = useState(false);
   const [recommendedModel, setRecommendedModel] = useState('');
+  const [tokenRecommendation, setTokenRecommendation] = useState<{ generation_max_tokens: number; budget_max_tokens: number; notes: string[] } | null>(null);
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const models = useAppStore((s) => s.models);
 
@@ -676,11 +695,27 @@ function LaunchWizard({
       if (!wizard.model) {
         setWizard((w) => ({ ...w, model: r.model }));
       }
-    }).catch(() => {});
+    }).catch(() => { });
     fetchAvailableTools().then((tools) => {
       setAvailableTools(tools);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
+
+  useEffect(() => {
+    if (!wizard.model) return;
+    fetchManagedAgentTokenPolicyRecommendation(wizard.model).then((rec) => {
+      setTokenRecommendation({
+        generation_max_tokens: rec.recommended.generation_max_tokens,
+        budget_max_tokens: rec.recommended.budget_max_tokens,
+        notes: rec.notes,
+      });
+      setWizard((current) => ({
+        ...current,
+        generationMaxTokens: current.generationMaxTokens || String(rec.recommended.generation_max_tokens),
+        budgetMaxTokens: current.budgetMaxTokens || String(rec.recommended.budget_max_tokens),
+      }));
+    }).catch(() => { });
+  }, [wizard.model]);
 
   function selectTemplate(tpl: AgentTemplate | null) {
     if (tpl) {
@@ -701,6 +736,8 @@ function LaunchWizard({
         taskDecomposition: (tpl as any).task_decomposition || UNIVERSAL_DEFAULTS.taskDecomposition,
         maxTurns: (tpl as any).max_turns || UNIVERSAL_DEFAULTS.maxTurns,
         temperature: (tpl as any).temperature ?? UNIVERSAL_DEFAULTS.temperature,
+        generationMaxTokens: String((tpl as any).generation_max_tokens ?? (tpl as any).max_tokens ?? tokenRecommendation?.generation_max_tokens ?? ''),
+        budgetMaxTokens: String((tpl as any).budget_max_tokens ?? tokenRecommendation?.budget_max_tokens ?? ''),
       }));
     } else {
       setWizard((w) => ({
@@ -714,6 +751,8 @@ function LaunchWizard({
         scheduleType: 'manual',
         scheduleValue: '',
         selectedTools: [],
+        generationMaxTokens: tokenRecommendation ? String(tokenRecommendation.generation_max_tokens) : '',
+        budgetMaxTokens: tokenRecommendation ? String(tokenRecommendation.budget_max_tokens) : '',
         ...UNIVERSAL_DEFAULTS,
       }));
     }
@@ -746,7 +785,9 @@ function LaunchWizard({
         max_turns: wizard.maxTurns,
         temperature: wizard.temperature,
       };
-      if (wizard.budget) config.budget = parseFloat(wizard.budget);
+      if (wizard.budget) config.max_cost = parseFloat(wizard.budget);
+      if (wizard.generationMaxTokens) config.generation_max_tokens = parseInt(wizard.generationMaxTokens, 10);
+      if (wizard.budgetMaxTokens) config.budget_max_tokens = parseInt(wizard.budgetMaxTokens, 10);
       if (wizard.instruction.trim()) config.instruction = wizard.instruction.trim();
       if (wizard.model) config.model = wizard.model;
       if (wizard.routerPolicy) config.router_policy = wizard.routerPolicy;
@@ -933,7 +974,7 @@ function LaunchWizard({
               {wizard.scheduleType === 'weekly' && (
                 <div className="mt-1.5 space-y-1.5">
                   <div className="flex gap-1">
-                    {(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as const).map((day, idx) => {
+                    {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map((day, idx) => {
                       const dayNum = String(idx + 1);
                       const cronParts = wizard.scheduleValue.match(/\*\s+\*\s+(.+)$/);
                       const selectedDays = cronParts ? cronParts[1].split(',') : [];
@@ -1082,6 +1123,18 @@ function LaunchWizard({
                     className="w-full px-2 py-1 rounded text-xs" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} />
                 </div>
                 <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--color-text-tertiary)' }}>Generation Max Tokens</label>
+                  <input type="number" min="256" step="128" value={wizard.generationMaxTokens} onChange={(e) => setWizard((w) => ({ ...w, generationMaxTokens: e.target.value }))}
+                    placeholder={tokenRecommendation ? String(tokenRecommendation.generation_max_tokens) : '1536'}
+                    className="w-full px-2 py-1 rounded text-xs" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--color-text-tertiary)' }}>Runtime Token Budget</label>
+                  <input type="number" min="0" step="512" value={wizard.budgetMaxTokens} onChange={(e) => setWizard((w) => ({ ...w, budgetMaxTokens: e.target.value }))}
+                    placeholder={tokenRecommendation ? String(tokenRecommendation.budget_max_tokens) : '24000'}
+                    className="w-full px-2 py-1 rounded text-xs" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} />
+                </div>
+                <div>
                   <label className="block text-xs mb-1" style={{ color: 'var(--color-text-tertiary)' }}>Schedule Type</label>
                   <select value={wizard.scheduleType} onChange={(e) => setWizard((w) => ({ ...w, scheduleType: e.target.value, scheduleValue: e.target.value === 'manual' ? '' : w.scheduleValue }))}
                     className="w-full px-2 py-1 rounded text-xs" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
@@ -1093,6 +1146,11 @@ function LaunchWizard({
                   </select>
                 </div>
               </div>
+              {tokenRecommendation && (
+                <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                  Recommended for this machine: {tokenRecommendation.generation_max_tokens} generation tokens and {formatTokenCount(tokenRecommendation.budget_max_tokens)} runtime tokens.
+                </p>
+              )}
             </div>
           </details>
 
@@ -1200,7 +1258,9 @@ function AgentCard({
 }) {
   const canPause = agent.status === 'running' || agent.status === 'idle';
   const canResume = agent.status === 'paused';
-  const canRecover = agent.status === 'error' || agent.status === 'stalled' || agent.status === 'needs_attention';
+  const canRecover = agent.status === 'error' || agent.status === 'stalled' || agent.status === 'needs_attention' || agent.status === 'budget_exceeded';
+  const maxCost = ((agent.config?.max_cost ?? agent.config?.budget) as number) || 0;
+  const budgetMaxTokens = getBudgetMaxTokens(agent.config);
 
   return (
     <div
@@ -1241,25 +1301,49 @@ function AgentCard({
       </div>
 
       {/* Budget progress bar */}
-      {(agent.config?.max_cost as number) > 0 && (
+      {maxCost > 0 && (
         <div className="mb-3">
           <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
             <span>Budget</span>
             <span>
-              {formatCost(agent.total_cost)} / ${(agent.config?.max_cost as number).toFixed(0)}
+              {formatCost(agent.total_cost)} / ${maxCost.toFixed(0)}
             </span>
           </div>
           <div className="w-full rounded-full h-1.5" style={{ background: 'var(--color-bg)' }}>
             <div
               className="h-1.5 rounded-full transition-all"
               style={{
-                width: `${Math.min(100, ((agent.total_cost ?? 0) / (agent.config?.max_cost as number)) * 100)}%`,
+                width: `${Math.min(100, ((agent.total_cost ?? 0) / maxCost) * 100)}%`,
                 background:
-                  ((agent.total_cost ?? 0) / (agent.config?.max_cost as number)) > 0.9
+                  ((agent.total_cost ?? 0) / maxCost) > 0.9
                     ? 'var(--color-error)'
-                    : ((agent.total_cost ?? 0) / (agent.config?.max_cost as number)) > 0.75
+                    : ((agent.total_cost ?? 0) / maxCost) > 0.75
                       ? 'var(--color-warning)'
                       : 'var(--color-success)',
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {budgetMaxTokens > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+            <span>Runtime Tokens</span>
+            <span>
+              {formatTokenCount(agent.total_tokens)} / {formatTokenCount(budgetMaxTokens)}
+            </span>
+          </div>
+          <div className="w-full rounded-full h-1.5" style={{ background: 'var(--color-bg)' }}>
+            <div
+              className="h-1.5 rounded-full transition-all"
+              style={{
+                width: `${Math.min(100, ((agent.total_tokens ?? 0) / budgetMaxTokens) * 100)}%`,
+                background:
+                  ((agent.total_tokens ?? 0) / budgetMaxTokens) > 0.9
+                    ? 'var(--color-error)'
+                    : ((agent.total_tokens ?? 0) / budgetMaxTokens) > 0.75
+                      ? 'var(--color-warning)'
+                      : 'var(--color-accent)',
               }}
             />
           </div>
@@ -1526,7 +1610,9 @@ function AgentConfigGrid({ agent, onAgentUpdated }: { agent: ManagedAgent; onAge
     ['Agent Type', <span key="at">{agent.agent_type}</span>],
     ['Schedule', <span key="sc">{formatSchedule(agent.schedule_type, agent.schedule_value)}</span>],
     ['Last Run', <span key="lr">{formatRelativeTime(agent.last_run_at)}</span>],
-    ['Budget', <span key="bg">{agent.budget ? formatCost(agent.budget) : 'Unlimited'}</span>],
+    ['Budget', <span key="bg">{((agent.config?.max_cost ?? agent.config?.budget) as number) > 0 ? formatCost((agent.config?.max_cost ?? agent.config?.budget) as number) : 'Unlimited'}</span>],
+    ['Generation Tokens', <span key="gt">{formatTokenCount(getGenerationMaxTokens(agent.config))}</span>],
+    ['Runtime Token Budget', <span key="tb">{getBudgetMaxTokens(agent.config) > 0 ? formatTokenCount(getBudgetMaxTokens(agent.config)) : 'Unlimited'}</span>],
     ['Learning', <span key="le">{agent.learning_enabled ? 'Enabled' : 'Disabled'}</span>],
   ];
 
@@ -2071,7 +2157,7 @@ function ChannelsTab({ agentId }: { agentId: string }) {
           })),
         ),
       )
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -2138,99 +2224,99 @@ function ChannelsTab({ agentId }: { agentId: string }) {
             const unit = meta?.unitLabel || 'items';
             const isReconnecting = expandedId === c.connector_id;
             return (
-            <div
-              key={c.connector_id}
-              style={{
-                background: 'var(--color-bg-secondary)',
-                border: '1px solid color-mix(in srgb, var(--color-success) 22%, transparent)',
-                borderRadius: 6,
-                overflow: 'hidden',
-                gridColumn: isReconnecting ? '1 / -1' : undefined,
-              }}
-            >
-              <div style={{
-                padding: '12px 14px',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <span style={{ fontSize: 20 }}>{iconMap[c.connector_id] || '\uD83D\uDD17'}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>
-                    {c.display_name}
-                  </div>
-                  <div style={{ fontSize: 12, color: c.chunks > 0 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                    {c.chunks > 0
-                      ? `${c.chunks.toLocaleString()} ${unit}`
-                      : 'Connected — no data synced yet'}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setExpandedId(isReconnecting ? null : c.connector_id)}
-                  style={{
-                    fontSize: 10, padding: '3px 10px',
-                    background: 'transparent',
-                    color: 'var(--color-text-secondary)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4, cursor: 'pointer',
-                  }}
-                >
-                  {isReconnecting ? 'Cancel' : 'Reconnect'}
-                </button>
-              </div>
-              {isReconnecting && meta?.steps && (
+              <div
+                key={c.connector_id}
+                style={{
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid color-mix(in srgb, var(--color-success) 22%, transparent)',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  gridColumn: isReconnecting ? '1 / -1' : undefined,
+                }}
+              >
                 <div style={{
-                  borderTop: '1px solid var(--color-border)',
-                  padding: 12,
+                  padding: '12px 14px',
+                  display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                  <div style={{
-                    fontSize: 12, color: 'var(--color-warning)',
-                    marginBottom: 8,
-                  }}>
-                    Re-enter credentials to reconnect this source.
-                  </div>
-                  {meta.steps.map((step, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: 'var(--color-bg)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 6, padding: 10,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <div style={{
-                        color: 'var(--color-accent-purple)', fontSize: 10,
-                        fontWeight: 600, marginBottom: 3,
-                      }}>
-                        STEP {i + 1}
-                      </div>
-                      <div style={{ fontSize: 12, marginBottom: step.url ? 4 : 0 }}>
-                        {step.label}
-                      </div>
-                      {step.url && (
-                        <a
-                          href={step.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            color: 'var(--color-accent)', fontSize: 11,
-                            textDecoration: 'underline',
-                          }}
-                        >
-                          {step.urlLabel || 'Open'} →
-                        </a>
-                      )}
+                  <span style={{ fontSize: 20 }}>{iconMap[c.connector_id] || '\uD83D\uDD17'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>
+                      {c.display_name}
                     </div>
-                  ))}
-                  {meta.inputFields && (
-                    <InlineConnectForm
-                      fields={meta.inputFields}
-                      loading={loading}
-                      onSubmit={(req) => handleConnect(c.connector_id, req)}
-                    />
-                  )}
+                    <div style={{ fontSize: 12, color: c.chunks > 0 ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                      {c.chunks > 0
+                        ? `${c.chunks.toLocaleString()} ${unit}`
+                        : 'Connected — no data synced yet'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setExpandedId(isReconnecting ? null : c.connector_id)}
+                    style={{
+                      fontSize: 10, padding: '3px 10px',
+                      background: 'transparent',
+                      color: 'var(--color-text-secondary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                  >
+                    {isReconnecting ? 'Cancel' : 'Reconnect'}
+                  </button>
                 </div>
-              )}
-            </div>
+                {isReconnecting && meta?.steps && (
+                  <div style={{
+                    borderTop: '1px solid var(--color-border)',
+                    padding: 12,
+                  }}>
+                    <div style={{
+                      fontSize: 12, color: 'var(--color-warning)',
+                      marginBottom: 8,
+                    }}>
+                      Re-enter credentials to reconnect this source.
+                    </div>
+                    {meta.steps.map((step, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          background: 'var(--color-bg)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 6, padding: 10,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <div style={{
+                          color: 'var(--color-accent-purple)', fontSize: 10,
+                          fontWeight: 600, marginBottom: 3,
+                        }}>
+                          STEP {i + 1}
+                        </div>
+                        <div style={{ fontSize: 12, marginBottom: step.url ? 4 : 0 }}>
+                          {step.label}
+                        </div>
+                        {step.url && (
+                          <a
+                            href={step.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: 'var(--color-accent)', fontSize: 11,
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {step.urlLabel || 'Open'} →
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                    {meta.inputFields && (
+                      <InlineConnectForm
+                        fields={meta.inputFields}
+                        loading={loading}
+                        onSubmit={(req) => handleConnect(c.connector_id, req)}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -2270,12 +2356,16 @@ function ChannelsTab({ agentId }: { agentId: string }) {
                 >
                   <span style={{ fontSize: 20 }}>{iconMap[c.connector_id] || '\uD83D\uDD17'}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600,
-                      color: 'var(--color-text-secondary)' }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 600,
+                      color: 'var(--color-text-secondary)'
+                    }}>
                       {c.display_name}
                     </div>
-                    <div style={{ fontSize: 12,
-                      color: 'var(--color-text-secondary)' }}>
+                    <div style={{
+                      fontSize: 12,
+                      color: 'var(--color-text-secondary)'
+                    }}>
                       Not connected
                     </div>
                   </div>
@@ -2549,8 +2639,8 @@ function SendBlueWebhookStep({
           >
             {webhookStatus === 'registering' ? 'Registering...'
               : webhookStatus === 'done' ? 'Registered!'
-              : webhookStatus === 'error' ? 'Retry'
-              : 'Register Webhook'}
+                : webhookStatus === 'error' ? 'Retry'
+                  : 'Register Webhook'}
           </button>
         </div>
         {webhookStatus === 'done' && (
@@ -3017,7 +3107,7 @@ function MessagingTab({ agentId }: { agentId: string }) {
         agentId={agentId}
         binding={bindings.find((b) => b.channel_type === 'sendblue')}
         onDone={loadBindings}
-        onRemove={(id) => { unbindAgentChannel(agentId, id).then(loadBindings).catch(() => {}); }}
+        onRemove={(id) => { unbindAgentChannel(agentId, id).then(loadBindings).catch(() => { }); }}
       />
 
       {/* Divider */}
@@ -3226,7 +3316,7 @@ function LearningTab({ agentId, learningEnabled }: { agentId: string; learningEn
   const [triggering, setTriggering] = useState(false);
 
   useEffect(() => {
-    fetchLearningLog(agentId).then(setLogs).catch(() => {});
+    fetchLearningLog(agentId).then(setLogs).catch(() => { });
   }, [agentId]);
 
   async function handleTrigger() {
@@ -3234,7 +3324,7 @@ function LearningTab({ agentId, learningEnabled }: { agentId: string; learningEn
     try {
       await triggerLearning(agentId);
       // Refresh after a short delay
-      setTimeout(() => fetchLearningLog(agentId).then(setLogs).catch(() => {}), 1000);
+      setTimeout(() => fetchLearningLog(agentId).then(setLogs).catch(() => { }), 1000);
     } catch {
       // ignore
     } finally {
@@ -3529,7 +3619,7 @@ export function AgentsPage() {
 
   useEffect(() => {
     refresh();
-    fetchTemplates().then(setTemplates).catch(() => {});
+    fetchTemplates().then(setTemplates).catch(() => { });
   }, [refresh]);
 
   const selectedAgent = managedAgents.find((a) => a.id === selectedAgentId);
@@ -3542,17 +3632,17 @@ export function AgentsPage() {
   }, [selectedAgentId]);
 
   const handlePause = async (id: string) => {
-    await pauseManagedAgent(id).catch(() => {});
+    await pauseManagedAgent(id).catch(() => { });
     await refresh();
   };
 
   const handleResume = async (id: string) => {
-    await resumeManagedAgent(id).catch(() => {});
+    await resumeManagedAgent(id).catch(() => { });
     await refresh();
   };
 
   const handleDelete = async (id: string) => {
-    await deleteManagedAgent(id).catch(() => {});
+    await deleteManagedAgent(id).catch(() => { });
     if (selectedAgentId === id) setSelectedAgentId(null);
     await refresh();
   };
@@ -3580,7 +3670,7 @@ export function AgentsPage() {
             message: `Agent "${agent.name}" failed: ${agent.summary_memory || 'Unknown error'}`,
           });
         }
-      } catch {}
+      } catch { }
       await refresh();
     }, 3000);
   };
@@ -3616,7 +3706,7 @@ export function AgentsPage() {
           }
           prevStatuses.current[agent.id] = agent.status;
         }
-      } catch {}
+      } catch { }
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -3651,327 +3741,327 @@ export function AgentsPage() {
     return (
       <div className="flex-1 overflow-y-auto px-6 py-10">
         <div className="max-w-5xl mx-auto">
-        {/* Back button */}
-        <button
-          onClick={() => setSelectedAgentId(null)}
-          className="flex items-center gap-1 mb-4 text-sm cursor-pointer"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          <ChevronLeft size={16} /> Back to agents
-        </button>
+          {/* Back button */}
+          <button
+            onClick={() => setSelectedAgentId(null)}
+            className="flex items-center gap-1 mb-4 text-sm cursor-pointer"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <ChevronLeft size={16} /> Back to agents
+          </button>
 
-        {/* Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Bot size={24} style={{ color: 'var(--color-accent)' }} />
-            <div>
-              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
-                {selectedAgent.name}
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <StatusBadge status={selectedAgent.status} />
-                <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                  {selectedAgent.agent_type}
-                </span>
-              </div>
-            </div>
-          </div>
-          {/* Header actions */}
-          <div className="flex items-center gap-2">
-            {detailTab === 'interact' ? (
-              <span
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
-                style={{ background: 'var(--color-success)20', color: 'var(--color-success)', border: '1px solid var(--color-success)40' }}
-              >
-                <MessageSquare size={13} /> Chat ready — just type below
-              </span>
-            ) : (
-              <button
-                onClick={() => handleRun(selectedAgent.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer font-medium"
-                style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
-              >
-                <Zap size={13} /> Run Now
-              </button>
-            )}
-            {(selectedAgent.status === 'running' || selectedAgent.status === 'idle') && (
-              <button
-                onClick={() => handlePause(selectedAgent.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
-                style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-              >
-                <Pause size={13} /> Pause
-              </button>
-            )}
-            {selectedAgent.status === 'paused' && (
-              <button
-                onClick={() => handleResume(selectedAgent.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
-                style={{ background: 'var(--color-success)20', color: 'var(--color-success)', border: '1px solid var(--color-success)40' }}
-              >
-                <Play size={13} /> Resume
-              </button>
-            )}
-            {(selectedAgent.status === 'error' || selectedAgent.status === 'stalled' || selectedAgent.status === 'needs_attention') && (
-              <button
-                onClick={() => handleRecover(selectedAgent.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
-                style={{ background: 'var(--color-error)20', color: 'var(--color-error)', border: '1px solid var(--color-error)40' }}
-              >
-                <AlertTriangle size={13} /> Recover
-              </button>
-            )}
-            <button
-              onClick={async () => {
-                if (window.confirm(`Delete ${selectedAgent.name}? This cannot be undone.`)) {
-                  await deleteManagedAgent(selectedAgent.id);
-                  setSelectedAgentId(null);
-                  await refresh();
-                }
-              }}
-              className="p-1.5 rounded-lg cursor-pointer transition-colors"
-              style={{ color: 'var(--color-error)', background: 'var(--color-error)15' }}
-              title="Delete agent"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-lg overflow-x-auto" style={{ background: 'var(--color-bg-secondary)' }}>
-          {DETAIL_TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setDetailTab(id)}
-              className="px-3 py-2 rounded-md text-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-colors"
-              style={{
-                background: detailTab === id ? 'var(--color-bg)' : 'transparent',
-                color: detailTab === id ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                fontWeight: detailTab === id ? 500 : 400,
-              }}
-            >
-              <Icon size={13} />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab: Overview */}
-        {detailTab === 'overview' && (
-          <div className="space-y-3">
-            {/* Instruction */}
-            <AgentInstructionSection agent={selectedAgent} onAgentUpdated={refresh} />
-
-            {/* Configuration */}
-            <div
-              className="p-3 rounded-lg"
-              style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
-            >
-              <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-                Configuration
-              </h3>
-              <AgentConfigGrid agent={selectedAgent} onAgentUpdated={refresh} />
-              <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--color-border)' }}>
-                <span className="text-xs font-mono" style={{ color: 'var(--color-text-tertiary)' }}>
-                  ID: {selectedAgent.id}
-                </span>
-              </div>
-            </div>
-
-            {/* Hint for deep research agents */}
-            {selectedAgent.agent_type === 'deep_research' && (
-              <div
-                className="flex items-start gap-3 p-3 rounded-lg text-sm"
-                style={{
-                  background: 'var(--color-accent-subtle)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                <Database size={16} style={{ color: 'var(--color-accent)', flexShrink: 0, marginTop: 2 }} />
-                <div style={{ color: 'var(--color-text-secondary)' }}>
-                  <strong>Tip:</strong> Connect your personal data in the{' '}
-                  <button
-                    onClick={() => setDetailTab('channels')}
-                    className="cursor-pointer underline"
-                    style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
-                  >Data Sources</button>{' '}
-                  tab, then set up{' '}
-                  <button
-                    onClick={() => setDetailTab('messaging')}
-                    className="cursor-pointer underline"
-                    style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
-                  >Messaging Channels</button>{' '}
-                  to talk to this agent from your phone.
+          {/* Header */}
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Bot size={24} style={{ color: 'var(--color-accent)' }} />
+              <div>
+                <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+                  {selectedAgent.name}
+                </h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <StatusBadge status={selectedAgent.status} />
+                  <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                    {selectedAgent.agent_type}
+                  </span>
                 </div>
               </div>
-            )}
-
-            {/* Usage stats + savings — single compact row */}
-            {(() => {
-              const inTok = selectedAgent.input_tokens ?? 0;
-              const outTok = selectedAgent.output_tokens ?? 0;
-              const modelName = (selectedAgent.config?.model as string) || '';
-              const paramMatch = modelName.match(/:(\d+(?:\.\d+)?)b/i);
-              const paramsB = paramMatch ? parseFloat(paramMatch[1]) : 9;
-              const flops = 2 * paramsB * 1e9 * (inTok + outTok);
-              const providers = [
-                { label: 'GPT-5.3', inPer1M: 2.0, outPer1M: 10.0 },
-                { label: 'Claude Opus 4.6', inPer1M: 5.0, outPer1M: 25.0 },
-                { label: 'Gemini 3.1 Pro', inPer1M: 2.0, outPer1M: 12.0 },
-              ];
-              const energyWh = (inTok + outTok) / 1000 * 0.4;
-              const energyKj = energyWh * 3.6;
-              const fmtFlops = flops >= 1e15 ? `${(flops / 1e15).toFixed(1)} PFLOPs` : `${(flops / 1e12).toFixed(1)} TFLOPs`;
-              const hasSavings = inTok + outTok > 0;
-              const sectionTitle = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8 };
-              return (
-                <div className="p-4 rounded-xl" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
-                  <div className="flex gap-0 flex-wrap items-stretch">
-                    {/* Agent Statistics */}
-                    <div className="pr-5">
-                      <p style={sectionTitle}>Agent Statistics</p>
-                      <div className="flex gap-5">
-                        <div>
-                          <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{selectedAgent.total_runs ?? 0}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Total Queries</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{inTok.toLocaleString()}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Input Tokens</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{outTok.toLocaleString()}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Output Tokens</p>
-                        </div>
-                      </div>
-                    </div>
-                    {hasSavings && (<>
-                      <div style={{ width: 1, background: 'var(--color-border)' }} />
-                      {/* Local Utilization */}
-                      <div className="px-5">
-                        <p style={sectionTitle}>Local Utilization</p>
-                        <div className="flex gap-5">
-                          <div>
-                            <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>{fmtFlops}</p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Compute</p>
-                          </div>
-                          <div>
-                            <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>{energyKj.toFixed(2)} kJ</p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Energy</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ width: 1, background: 'var(--color-border)' }} />
-                      {/* Dollars Saved */}
-                      <div className="pl-5">
-                        <p style={sectionTitle}>Dollars Saved vs.</p>
-                        <div className="flex gap-5">
-                          {providers.map((p) => {
-                            const cost = (inTok / 1e6) * p.inPer1M + (outTok / 1e6) * p.outPer1M;
-                            return (
-                              <div key={p.label}>
-                                <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>${cost.toFixed(4)}</p>
-                                <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>{p.label}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>)}
-                  </div>
-                </div>);
-            })()}
-
-            {/* Channels summary */}
-            {channels.length > 0 && (
-              <div
-                className="p-4 rounded-lg"
-                style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+            </div>
+            {/* Header actions */}
+            <div className="flex items-center gap-2">
+              {detailTab === 'interact' ? (
+                <span
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'var(--color-success)20', color: 'var(--color-success)', border: '1px solid var(--color-success)40' }}
+                >
+                  <MessageSquare size={13} /> Chat ready — just type below
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleRun(selectedAgent.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer font-medium"
+                  style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
+                >
+                  <Zap size={13} /> Run Now
+                </button>
+              )}
+              {(selectedAgent.status === 'running' || selectedAgent.status === 'idle') && (
+                <button
+                  onClick={() => handlePause(selectedAgent.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
+                  style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                >
+                  <Pause size={13} /> Pause
+                </button>
+              )}
+              {selectedAgent.status === 'paused' && (
+                <button
+                  onClick={() => handleResume(selectedAgent.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
+                  style={{ background: 'var(--color-success)20', color: 'var(--color-success)', border: '1px solid var(--color-success)40' }}
+                >
+                  <Play size={13} /> Resume
+                </button>
+              )}
+              {(selectedAgent.status === 'error' || selectedAgent.status === 'stalled' || selectedAgent.status === 'needs_attention' || selectedAgent.status === 'budget_exceeded') && (
+                <button
+                  onClick={() => handleRecover(selectedAgent.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm cursor-pointer"
+                  style={{ background: 'var(--color-error)20', color: 'var(--color-error)', border: '1px solid var(--color-error)40' }}
+                >
+                  <AlertTriangle size={13} /> Recover
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  if (window.confirm(`Delete ${selectedAgent.name}? This cannot be undone.`)) {
+                    await deleteManagedAgent(selectedAgent.id);
+                    setSelectedAgentId(null);
+                    await refresh();
+                  }
+                }}
+                className="p-1.5 rounded-lg cursor-pointer transition-colors"
+                style={{ color: 'var(--color-error)', background: 'var(--color-error)15' }}
+                title="Delete agent"
               >
-                <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                  Messaging Channels
-                </h3>
-                {channels.map((b) => (
-                  <div key={b.id} className="text-sm py-1" style={{ color: 'var(--color-text)' }}>
-                    {b.channel_type}: {b.routing_mode}
-                  </div>
-                ))}
-              </div>
-            )}
+                <Trash2 size={15} />
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Tab: Interact */}
-        {detailTab === 'interact' && <InteractTab agentId={selectedAgent.id} agentStatus={selectedAgent.status} />}
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 p-1 rounded-lg overflow-x-auto" style={{ background: 'var(--color-bg-secondary)' }}>
+            {DETAIL_TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setDetailTab(id)}
+                className="px-3 py-2 rounded-md text-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-colors"
+                style={{
+                  background: detailTab === id ? 'var(--color-bg)' : 'transparent',
+                  color: detailTab === id ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                  fontWeight: detailTab === id ? 500 : 400,
+                }}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Tab: Channels */}
-        {detailTab === 'channels' && (
-          <ChannelsTab agentId={selectedAgent.id} />
-        )}
+          {/* Tab: Overview */}
+          {detailTab === 'overview' && (
+            <div className="space-y-3">
+              {/* Instruction */}
+              <AgentInstructionSection agent={selectedAgent} onAgentUpdated={refresh} />
 
-        {/* Tab: Messaging */}
-        {detailTab === 'messaging' && (
-          <MessagingTab agentId={selectedAgent.id} />
-        )}
-
-        {/* Tab: Tasks */}
-        {detailTab === 'tasks' && (
-          <div className="space-y-2">
-            {tasks.map((t) => (
+              {/* Configuration */}
               <div
-                key={t.id}
                 className="p-3 rounded-lg"
                 style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
               >
-                <div className="flex justify-between items-start gap-3">
-                  <span className="text-sm" style={{ color: 'var(--color-text)' }}>
-                    {t.description}
-                  </span>
-                  <span
-                    className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                    style={{
-                      background: statusColor(t.status) + '20',
-                      color: statusColor(t.status),
-                    }}
-                  >
-                    {t.status}
+                <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+                  Configuration
+                </h3>
+                <AgentConfigGrid agent={selectedAgent} onAgentUpdated={refresh} />
+                <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <span className="text-xs font-mono" style={{ color: 'var(--color-text-tertiary)' }}>
+                    ID: {selectedAgent.id}
                   </span>
                 </div>
               </div>
-            ))}
-            {tasks.length === 0 && (
-              <div className="text-sm py-8 text-center" style={{ color: 'var(--color-text-tertiary)' }}>
-                No tasks assigned.
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* Tab: Memory */}
-        {detailTab === 'memory' && (
-          <div
-            className="p-4 rounded-lg"
-            style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
-          >
-            <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
-              <Brain size={14} /> Summary Memory
-            </h3>
-            <p className="whitespace-pre-wrap text-sm" style={{ color: 'var(--color-text)' }}>
-              {selectedAgent.summary_memory || 'Agent has no stored memory yet.'}
-            </p>
-          </div>
-        )}
+              {/* Hint for deep research agents */}
+              {selectedAgent.agent_type === 'deep_research' && (
+                <div
+                  className="flex items-start gap-3 p-3 rounded-lg text-sm"
+                  style={{
+                    background: 'var(--color-accent-subtle)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  <Database size={16} style={{ color: 'var(--color-accent)', flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ color: 'var(--color-text-secondary)' }}>
+                    <strong>Tip:</strong> Connect your personal data in the{' '}
+                    <button
+                      onClick={() => setDetailTab('channels')}
+                      className="cursor-pointer underline"
+                      style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
+                    >Data Sources</button>{' '}
+                    tab, then set up{' '}
+                    <button
+                      onClick={() => setDetailTab('messaging')}
+                      className="cursor-pointer underline"
+                      style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0, font: 'inherit' }}
+                    >Messaging Channels</button>{' '}
+                    to talk to this agent from your phone.
+                  </div>
+                </div>
+              )}
 
-        {/* Tab: Learning */}
-        {detailTab === 'learning' && (
-          <LearningTab agentId={selectedAgent.id} learningEnabled={!!selectedAgent.learning_enabled} />
-        )}
+              {/* Usage stats + savings — single compact row */}
+              {(() => {
+                const inTok = selectedAgent.input_tokens ?? 0;
+                const outTok = selectedAgent.output_tokens ?? 0;
+                const modelName = (selectedAgent.config?.model as string) || '';
+                const paramMatch = modelName.match(/:(\d+(?:\.\d+)?)b/i);
+                const paramsB = paramMatch ? parseFloat(paramMatch[1]) : 9;
+                const flops = 2 * paramsB * 1e9 * (inTok + outTok);
+                const providers = [
+                  { label: 'GPT-5.3', inPer1M: 2.0, outPer1M: 10.0 },
+                  { label: 'Claude Opus 4.6', inPer1M: 5.0, outPer1M: 25.0 },
+                  { label: 'Gemini 3.1 Pro', inPer1M: 2.0, outPer1M: 12.0 },
+                ];
+                const energyWh = (inTok + outTok) / 1000 * 0.4;
+                const energyKj = energyWh * 3.6;
+                const fmtFlops = flops >= 1e15 ? `${(flops / 1e15).toFixed(1)} PFLOPs` : `${(flops / 1e12).toFixed(1)} TFLOPs`;
+                const hasSavings = inTok + outTok > 0;
+                const sectionTitle = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8 };
+                return (
+                  <div className="p-4 rounded-xl" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}>
+                    <div className="flex gap-0 flex-wrap items-stretch">
+                      {/* Agent Statistics */}
+                      <div className="pr-5">
+                        <p style={sectionTitle}>Agent Statistics</p>
+                        <div className="flex gap-5">
+                          <div>
+                            <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{selectedAgent.total_runs ?? 0}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Total Queries</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{inTok.toLocaleString()}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Input Tokens</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-text)' }}>{outTok.toLocaleString()}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Output Tokens</p>
+                          </div>
+                        </div>
+                      </div>
+                      {hasSavings && (<>
+                        <div style={{ width: 1, background: 'var(--color-border)' }} />
+                        {/* Local Utilization */}
+                        <div className="px-5">
+                          <p style={sectionTitle}>Local Utilization</p>
+                          <div className="flex gap-5">
+                            <div>
+                              <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>{fmtFlops}</p>
+                              <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Compute</p>
+                            </div>
+                            <div>
+                              <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>{energyKj.toFixed(2)} kJ</p>
+                              <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Energy</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ width: 1, background: 'var(--color-border)' }} />
+                        {/* Dollars Saved */}
+                        <div className="pl-5">
+                          <p style={sectionTitle}>Dollars Saved vs.</p>
+                          <div className="flex gap-5">
+                            {providers.map((p) => {
+                              const cost = (inTok / 1e6) * p.inPer1M + (outTok / 1e6) * p.outPer1M;
+                              return (
+                                <div key={p.label}>
+                                  <p className="text-xl font-bold leading-none" style={{ color: 'var(--color-success)' }}>${cost.toFixed(4)}</p>
+                                  <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>{p.label}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>)}
+                    </div>
+                  </div>);
+              })()}
 
-        {/* Tab: Logs */}
-        {detailTab === 'logs' && (
-          <LogsTab agentId={selectedAgent.id} />
-        )}
+              {/* Channels summary */}
+              {channels.length > 0 && (
+                <div
+                  className="p-4 rounded-lg"
+                  style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+                >
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                    Messaging Channels
+                  </h3>
+                  {channels.map((b) => (
+                    <div key={b.id} className="text-sm py-1" style={{ color: 'var(--color-text)' }}>
+                      {b.channel_type}: {b.routing_mode}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Interact */}
+          {detailTab === 'interact' && <InteractTab agentId={selectedAgent.id} agentStatus={selectedAgent.status} />}
+
+          {/* Tab: Channels */}
+          {detailTab === 'channels' && (
+            <ChannelsTab agentId={selectedAgent.id} />
+          )}
+
+          {/* Tab: Messaging */}
+          {detailTab === 'messaging' && (
+            <MessagingTab agentId={selectedAgent.id} />
+          )}
+
+          {/* Tab: Tasks */}
+          {detailTab === 'tasks' && (
+            <div className="space-y-2">
+              {tasks.map((t) => (
+                <div
+                  key={t.id}
+                  className="p-3 rounded-lg"
+                  style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-sm" style={{ color: 'var(--color-text)' }}>
+                      {t.description}
+                    </span>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded flex-shrink-0"
+                      style={{
+                        background: statusColor(t.status) + '20',
+                        color: statusColor(t.status),
+                      }}
+                    >
+                      {t.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {tasks.length === 0 && (
+                <div className="text-sm py-8 text-center" style={{ color: 'var(--color-text-tertiary)' }}>
+                  No tasks assigned.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Memory */}
+          {detailTab === 'memory' && (
+            <div
+              className="p-4 rounded-lg"
+              style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
+            >
+              <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
+                <Brain size={14} /> Summary Memory
+              </h3>
+              <p className="whitespace-pre-wrap text-sm" style={{ color: 'var(--color-text)' }}>
+                {selectedAgent.summary_memory || 'Agent has no stored memory yet.'}
+              </p>
+            </div>
+          )}
+
+          {/* Tab: Learning */}
+          {detailTab === 'learning' && (
+            <LearningTab agentId={selectedAgent.id} learningEnabled={!!selectedAgent.learning_enabled} />
+          )}
+
+          {/* Tab: Logs */}
+          {detailTab === 'logs' && (
+            <LogsTab agentId={selectedAgent.id} />
+          )}
         </div>
       </div>
     );
@@ -3982,101 +4072,101 @@ export function AgentsPage() {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-10">
       <div className="max-w-5xl mx-auto">
-      {/* Launch wizard modal */}
-      {showWizard && (
-        <LaunchWizard
-          templates={templates}
-          onClose={() => setShowWizard(false)}
-          onLaunched={() => {
-            setShowWizard(false);
-            refresh();
-          }}
-        />
-      )}
-
-      <header className="mb-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-            Agents
-          </h1>
-          <button
-            onClick={() => agentManagerAvailable && setShowWizard(true)}
-            disabled={agentManagerAvailable === false}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: agentManagerAvailable === false ? 'var(--color-bg-tertiary)' : 'var(--color-accent)',
-              color: agentManagerAvailable === false ? 'var(--color-text-tertiary)' : 'var(--color-on-accent)',
-            }}
-          >
-            <Plus size={15} /> New Agent
-          </button>
-        </div>
-        <p className="text-sm mt-2 max-w-2xl" style={{ color: 'var(--color-text-secondary)' }}>
-          Long-running autonomous agents that can monitor sources, run tasks on a schedule, and message you through connected channels.
-        </p>
-      </header>
-
-      {agentManagerAvailable === false && (
-        <div
-          className="mx-4 mt-2 px-4 py-3 rounded-lg flex items-center gap-3 text-sm"
-          style={{
-            background: 'var(--color-accent-amber-subtle)',
-            border: '1px solid color-mix(in srgb, var(--color-warning) 20%, transparent)',
-            color: 'var(--color-accent-amber)',
-          }}
-        >
-          <AlertTriangle size={16} />
-          <span>Agent manager is not enabled. Set <code className="font-mono text-xs">agent_manager.enabled = true</code> in your config.</span>
-        </div>
-      )}
-
-      {/* Agent cards grid */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-        {managedAgents.map((a) => (
-          <AgentCard
-            key={a.id}
-            agent={a}
-            onClick={() => {
-              setSelectedAgentId(a.id);
-              setDetailTab('overview');
-            }}
-            onPause={handlePause}
-            onResume={handleResume}
-            onRun={handleRun}
-            onRecover={handleRecover}
-            onDelete={handleDelete}
-            onChat={(id) => {
-              setSelectedAgentId(id);
-              setDetailTab('interact');
-            }}
-            onEdit={(id) => {
-              setSelectedAgentId(id);
-              setDetailTab('overview');
+        {/* Launch wizard modal */}
+        {showWizard && (
+          <LaunchWizard
+            templates={templates}
+            onClose={() => setShowWizard(false)}
+            onLaunched={() => {
+              setShowWizard(false);
+              refresh();
             }}
           />
-        ))}
-      </div>
+        )}
 
-      {managedAgents.length === 0 && (
-        <div className="text-center py-16" style={{ color: 'var(--color-text-tertiary)' }}>
-          <Bot size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="mb-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-            No agents yet
+        <header className="mb-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
+              Agents
+            </h1>
+            <button
+              onClick={() => agentManagerAvailable && setShowWizard(true)}
+              disabled={agentManagerAvailable === false}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: agentManagerAvailable === false ? 'var(--color-bg-tertiary)' : 'var(--color-accent)',
+                color: agentManagerAvailable === false ? 'var(--color-text-tertiary)' : 'var(--color-on-accent)',
+              }}
+            >
+              <Plus size={15} /> New Agent
+            </button>
+          </div>
+          <p className="text-sm mt-2 max-w-2xl" style={{ color: 'var(--color-text-secondary)' }}>
+            Long-running autonomous agents that can monitor sources, run tasks on a schedule, and message you through connected channels.
           </p>
-          <p className="text-sm mb-6">Create your first agent to get started with autonomous task management.</p>
-          <button
-            onClick={() => agentManagerAvailable && setShowWizard(true)}
-            disabled={agentManagerAvailable === false}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        </header>
+
+        {agentManagerAvailable === false && (
+          <div
+            className="mx-4 mt-2 px-4 py-3 rounded-lg flex items-center gap-3 text-sm"
             style={{
-              background: agentManagerAvailable === false ? 'var(--color-bg-tertiary)' : 'var(--color-accent)',
-              color: agentManagerAvailable === false ? 'var(--color-text-tertiary)' : 'var(--color-on-accent)',
+              background: 'var(--color-accent-amber-subtle)',
+              border: '1px solid color-mix(in srgb, var(--color-warning) 20%, transparent)',
+              color: 'var(--color-accent-amber)',
             }}
           >
-            <Plus size={15} /> Launch your first agent
-          </button>
+            <AlertTriangle size={16} />
+            <span>Agent manager is not enabled. Set <code className="font-mono text-xs">agent_manager.enabled = true</code> in your config.</span>
+          </div>
+        )}
+
+        {/* Agent cards grid */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+          {managedAgents.map((a) => (
+            <AgentCard
+              key={a.id}
+              agent={a}
+              onClick={() => {
+                setSelectedAgentId(a.id);
+                setDetailTab('overview');
+              }}
+              onPause={handlePause}
+              onResume={handleResume}
+              onRun={handleRun}
+              onRecover={handleRecover}
+              onDelete={handleDelete}
+              onChat={(id) => {
+                setSelectedAgentId(id);
+                setDetailTab('interact');
+              }}
+              onEdit={(id) => {
+                setSelectedAgentId(id);
+                setDetailTab('overview');
+              }}
+            />
+          ))}
         </div>
-      )}
+
+        {managedAgents.length === 0 && (
+          <div className="text-center py-16" style={{ color: 'var(--color-text-tertiary)' }}>
+            <Bot size={48} className="mx-auto mb-4 opacity-30" />
+            <p className="mb-2 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+              No agents yet
+            </p>
+            <p className="text-sm mb-6">Create your first agent to get started with autonomous task management.</p>
+            <button
+              onClick={() => agentManagerAvailable && setShowWizard(true)}
+              disabled={agentManagerAvailable === false}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: agentManagerAvailable === false ? 'var(--color-bg-tertiary)' : 'var(--color-accent)',
+                color: agentManagerAvailable === false ? 'var(--color-text-tertiary)' : 'var(--color-on-accent)',
+              }}
+            >
+              <Plus size={15} /> Launch your first agent
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

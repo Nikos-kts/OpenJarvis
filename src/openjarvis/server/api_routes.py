@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import inspect
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any, Dict, List, Optional
+
+# Dedicated single-worker executor for voice LLM inference.
+# Using max_workers=1 ensures only one heavy inference job runs at a time,
+# preventing multiple concurrent local-model calls from saturating the CPU.
+_VOICE_INFERENCE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="voice-infer"
+)
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -762,7 +771,8 @@ async def transcribe_speech(request: Request):
     filename = getattr(audio_file, "filename", "audio.wav")
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "wav"
 
-    result = backend.transcribe(audio_bytes, format=ext, language=language or None)
+    import asyncio as _aio
+    result = await _aio.to_thread(backend.transcribe, audio_bytes, format=ext, language=language or None)
     return {
         "text": result.text,
         "language": result.language,
@@ -789,6 +799,46 @@ async def wakeword_health():
     from openjarvis.speech.wakeword import WakeWordDetector
 
     return {"available": WakeWordDetector.available()}
+
+
+@speech_router.get("/wake-mode")
+async def get_wake_mode(request: Request):
+    """Return the current Jarvis wake-up mode and auto-delay."""
+    svc = getattr(request.app.state, "clap_boot_service", None)
+    if svc is None:
+        return {"mode": "off", "auto_delay": 5, "running": False, "jarvis_agent_id": None}
+    return svc.get_status()
+
+
+@speech_router.put("/wake-mode")
+async def set_wake_mode(request: Request):
+    """Switch the Jarvis wake-up mode at runtime.
+
+    Body JSON: ``{"mode": "clap"|"auto"|"off", "auto_delay": <seconds>}``
+    """
+    svc = getattr(request.app.state, "clap_boot_service", None)
+    if svc is None:
+        raise HTTPException(status_code=501, detail="Clap boot service not available")
+    body = await request.json()
+    mode = body.get("mode")
+    auto_delay = body.get("auto_delay")
+    tts_model = body.get("tts_model")
+    playback_speed = body.get("playback_speed")
+    if mode is not None and mode not in ("clap", "auto", "off"):
+        raise HTTPException(status_code=422, detail="mode must be 'clap', 'auto', or 'off'")
+    if auto_delay is not None:
+        try:
+            auto_delay = float(auto_delay)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="auto_delay must be a number")
+    if tts_model is not None and not isinstance(tts_model, str):
+        raise HTTPException(status_code=422, detail="tts_model must be a string")
+    if playback_speed is not None:
+        try:
+            playback_speed = float(playback_speed)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="playback_speed must be a number")
+    return svc.set_mode(mode or svc.mode, auto_delay=auto_delay, tts_model=tts_model, playback_speed=playback_speed)
 
 
 @speech_router.websocket("/wakeword")
@@ -837,6 +887,7 @@ async def wakeword_stream(websocket: WebSocket):
     await websocket.send_json({"type": "ready"})
 
     chunks_received = 0
+    _ww_frames_processed = 0
     try:
         while True:
             data = await websocket.receive_bytes()
@@ -844,8 +895,14 @@ async def wakeword_stream(websocket: WebSocket):
             if chunks_received == 1:
                 _ww_log.info("WakeWord: first audio chunk received (%d bytes)", len(data))
             elif chunks_received % 500 == 0:
-                _ww_log.info("WakeWord: %d chunks processed", chunks_received)
+                _ww_log.info("WakeWord: %d chunks received, %d processed", chunks_received, _ww_frames_processed)
 
+            # Process every other chunk (~160 ms resolution) to halve CPU load.
+            # openwakeword tolerates dropped frames and will still detect wakewords.
+            if chunks_received % 2 == 0:
+                continue
+
+            _ww_frames_processed += 1
             scores = await asyncio.to_thread(detector.process_audio, data)
 
             # Check if any model exceeded threshold
@@ -944,7 +1001,11 @@ async def voice_live_stream(websocket: WebSocket):
 
     # Wait for optional config message (voice, system instruction)
     voice_name = "Kore"
-    system_text = "You are Jarvis, a helpful and concise AI assistant."
+    system_text = (
+        "You are J.A.R.V.I.S., an advanced AI assistant inspired by the Iron Man films. "
+        "Speak in a calm, refined, confident British butler tone. "
+        "Be polite, slightly formal, subtly witty, helpful, and composed."
+    )
     live_model = "gemini-2.5-flash-native-audio-latest"
 
     try:
@@ -1152,6 +1213,743 @@ async def voice_live_stream(websocket: WebSocket):
         except Exception:
             pass
         _voice_log.info("Voice Live: session ended")
+
+
+# ---- Voice Engine bridge (Gemini STT → OpenJarvis engine → Gemini TTS) ----
+
+
+async def _gemini_tts(
+    text: str,
+    api_key: str,
+    voice_name: str = "Kore",
+    model: str = "gemini-2.5-flash-preview-tts",
+) -> bytes:
+    """Synthesize speech via Gemini's generateContent with audio output.
+
+    Returns raw 24 kHz 16-bit mono PCM bytes ready for WebSocket streaming.
+    """
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+    response = await client.aio.models.generate_content(
+        model=model,
+        contents=text,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=voice_name,
+                    )
+                )
+            ),
+        ),
+    )
+    # The response contains inline audio data
+    audio_bytes = b""
+    for part in response.candidates[0].content.parts:
+        if part.inline_data and part.inline_data.data:
+            audio_bytes += part.inline_data.data
+    return audio_bytes
+
+
+async def _gemini_native_audio_repeat_stream(
+    text: str,
+    api_key: str,
+    voice_name: str = "Kore",
+    model: str = "gemini-2.5-flash-native-audio-latest",
+) -> AsyncIterator[bytes]:
+    """Synthesize speech via a dedicated Gemini Live native-audio session.
+
+    Native-audio models do not support ``generate_content`` for audio output,
+    so this helper opens a short-lived Live session and sends a verbatim-read
+    prompt as normal client content.
+    """
+    from google import genai
+    from google.genai import types
+
+    prompt = (
+        "You are a speech renderer. Read the provided text exactly as written. "
+        "Do not add, remove, paraphrase, summarize, or answer anything. "
+        "Speak only the exact text between the tags.\n\n"
+        "<VERBATIM_TEXT>\n"
+        f"{text}\n"
+        "</VERBATIM_TEXT>"
+    )
+
+    client = genai.Client(api_key=api_key)
+    config = types.LiveConnectConfig(
+        response_modalities=[types.Modality.AUDIO],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=voice_name,
+                )
+            )
+        ),
+    )
+
+    async with client.aio.live.connect(model=model, config=config) as session:
+        await session.send_client_content(
+            turns=types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)],
+            ),
+            turn_complete=True,
+        )
+
+        async for response in session.receive():
+            sc = response.server_content
+            if sc is None:
+                continue
+
+            if sc.model_turn:
+                for part in sc.model_turn.parts:
+                    if part.inline_data and part.inline_data.data:
+                        yield part.inline_data.data
+
+            if sc.turn_complete:
+                break
+
+
+def _resolve_voice_managed_jarvis_agent_id(app) -> str | None:
+    """Pick the managed Jarvis agent to handle voice requests.
+
+    Priority:
+      1) Clap boot service's pinned jarvis_agent_id (if valid)
+      2) First non-archived managed agent with agent_type='jarvis'
+    """
+    manager = getattr(app.state, "agent_manager", None)
+    if manager is None:
+        return None
+
+    try:
+        clap_service = getattr(app.state, "clap_boot_service", None)
+        pinned_id = getattr(clap_service, "_jarvis_id", None)
+        if pinned_id:
+            agent = manager.get_agent(pinned_id)
+            if agent and agent.get("status") != "archived":
+                return pinned_id
+    except Exception:
+        pass
+
+    try:
+        active = [ag for ag in manager.list_agents() if ag.get("status") != "archived"]
+
+        # Primary: explicit jarvis agent type
+        for ag in active:
+            if ag.get("agent_type") == "jarvis":
+                return ag.get("id")
+
+        # Fallback: user-named Jarvis managed agent (legacy setups)
+        for ag in active:
+            if str(ag.get("name", "")).strip().lower() == "jarvis":
+                return ag.get("id")
+    except Exception:
+        pass
+
+    return None
+
+
+@voice_router.websocket("/engine")
+async def voice_engine_stream(websocket: WebSocket):
+    """Voice-to-engine bridge: Gemini STT → OpenJarvis engine → Gemini TTS.
+
+    Uses Gemini Live only for real-time speech-to-text transcription,
+    routes the transcript through the full OpenJarvis engine pipeline
+    (memory, complexity analysis, agents, tools), and synthesizes the
+    response back to speech via Gemini TTS.
+
+    Protocol (browser ↔ server) — same as /live:
+      → Binary messages: raw 16-bit 16 kHz mono PCM audio from mic
+      → JSON ``{"type": "config", "voice": "Kore", "engine_model": "llama3.1:8b"}``
+      ← Binary messages: raw 16-bit 24 kHz mono PCM audio (TTS output)
+      ← JSON ``{"type": "user_transcript", "text": "..."}``
+      ← JSON ``{"type": "assistant_transcript", "text": "..."}``
+      ← JSON ``{"type": "turn_complete"}``
+      ← JSON ``{"type": "interrupted"}``
+      ← JSON ``{"type": "error", "detail": "..."}``
+      ← JSON ``{"type": "ready"}``
+    """
+    import asyncio
+    import os
+
+    await websocket.accept()
+    _voice_log.info("Voice Engine: WebSocket accepted")
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        await websocket.send_json(
+            {"type": "error", "detail": "GEMINI_API_KEY not configured"}
+        )
+        await websocket.close()
+        return
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        await websocket.send_json(
+            {"type": "error", "detail": "google-genai SDK not installed"}
+        )
+        await websocket.close()
+        return
+
+    # --- Parse config ---
+    voice_name = "Kore"
+    engine_model = ""  # empty = use server default
+    tts_mode = "native-audio-repeat"
+    tts_model = "gemini-2.5-flash-preview-tts"
+    system_text = (
+        "You are J.A.R.V.I.S., an advanced AI assistant inspired by the Iron Man films. "
+        "Speak in a calm, refined, confident British butler tone. "
+        "Be polite, slightly formal, subtly witty, helpful, and composed."
+    )
+    # Only native-audio models support bidiGenerateContent.
+    # They require response_modalities=[AUDIO]; we'll discard Gemini's
+    # audio and only use input_audio_transcription for STT.
+    live_model = "gemini-2.5-flash-native-audio-latest"
+
+    try:
+        first_msg = await asyncio.wait_for(websocket.receive(), timeout=2.0)
+        if first_msg.get("text"):
+            import json as _json
+
+            cfg = _json.loads(first_msg["text"])
+            if cfg.get("type") == "config":
+                voice_name = cfg.get("voice", voice_name)
+                system_text = cfg.get("system", system_text)
+                engine_model = cfg.get("engine_model", "")
+                requested_model = cfg.get("stt_model", "") or cfg.get("model", "")
+                if requested_model in _ALLOWED_LIVE_MODELS:
+                    live_model = requested_model
+                requested_tts_mode = cfg.get("tts_mode", "")
+                if requested_tts_mode in ("gemini-tts", "native-audio-repeat", "browser-fallback"):
+                    tts_mode = requested_tts_mode
+                requested_tts_model = cfg.get("tts_model", "")
+                if requested_tts_model:
+                    tts_model = requested_tts_model
+                _voice_log.info(
+                    "Voice Engine: config received — voice=%s, engine_model=%s, stt_model=%s, tts_mode=%s, tts_model=%s",
+                    voice_name,
+                    engine_model or "(default)",
+                    live_model,
+                    tts_mode,
+                    tts_model,
+                )
+    except (asyncio.TimeoutError, Exception):
+        pass
+
+    # --- Get engine, agent, and memory from app state ---
+    engine = getattr(websocket.app.state, "engine", None)
+    if engine is None:
+        await websocket.send_json(
+            {"type": "error", "detail": "No engine configured"}
+        )
+        await websocket.close()
+        return
+    agent = getattr(websocket.app.state, "agent", None)
+    managed_agent_manager = getattr(websocket.app.state, "agent_manager", None)
+    managed_agent_executor = getattr(websocket.app.state, "agent_executor", None)
+    managed_jarvis_agent_id = _resolve_voice_managed_jarvis_agent_id(websocket.app)
+
+    if not engine_model:
+        engine_model = getattr(websocket.app.state, "model", "") or ""
+
+    memory_backend = _get_memory_backend(websocket)
+    config_obj = getattr(websocket.app.state, "config", None)
+
+    _voice_log.info(
+        "Voice Engine: starting (stt=%s, engine_model=%s, voice=%s)",
+        live_model,
+        engine_model or "(default)",
+        voice_name,
+    )
+
+    # --- Configure Gemini Live for STT ---
+    # Native-audio models require AUDIO output. We enable
+    # input_audio_transcription to get user speech as text,
+    # and output_audio_transcription to know when Gemini's turn ends.
+    # Gemini's own audio replies are discarded — only the user transcript
+    # is routed through the OpenJarvis engine.
+    stt_config = types.LiveConnectConfig(
+        response_modalities=[types.Modality.AUDIO],
+        system_instruction=types.Content(
+            parts=[types.Part(text=(
+                "You are a speech transcription assistant. "
+                "Acknowledge briefly. The user's speech transcript is what matters."
+            ))]
+        ),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow(),
+        ),
+    )
+
+    client = genai.Client(api_key=api_key)
+
+    # Seed conversation with a system message so the engine knows its role
+    from openjarvis.core.types import Message, Role
+
+    conversation_history: list = [
+        Message(
+            role=Role.SYSTEM,
+            content=system_text,
+        )
+    ]
+
+    try:
+        async with client.aio.live.connect(
+            model=live_model, config=stt_config
+        ) as session:
+            await websocket.send_json({"type": "ready"})
+            _voice_log.info("Voice Engine: Gemini STT session ready")
+
+            # --- Forward browser audio → Gemini for STT ---
+            async def forward_to_gemini() -> None:
+                try:
+                    while True:
+                        msg = await websocket.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            break
+                        if msg.get("bytes"):
+                            await session.send_realtime_input(
+                                audio=types.Blob(
+                                    data=msg["bytes"],
+                                    mime_type="audio/pcm;rate=16000",
+                                )
+                            )
+                except WebSocketDisconnect:
+                    pass
+
+            # --- Listen for transcripts, route through engine, TTS back ---
+            async def process_and_respond() -> None:
+                current_utterance = ""
+                try:
+                    while True:
+                        async for response in session.receive():
+                            if response.go_away:
+                                _voice_log.info(
+                                    "Voice Engine: Gemini sent go_away"
+                                )
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "detail": "STT session ended. Please reconnect.",
+                                })
+                                return
+
+                            sc = response.server_content
+                            if sc is None:
+                                continue
+
+                            # Discard Gemini's own audio output — we only
+                            # care about the user's input transcription.
+                            # (Native-audio models always produce audio
+                            #  in response, but we ignore it.)
+
+                            # Collect user speech transcription
+                            if (
+                                hasattr(sc, "input_transcription")
+                                and sc.input_transcription
+                                and sc.input_transcription.text
+                            ):
+                                chunk = sc.input_transcription.text
+                                current_utterance += chunk
+                                _voice_log.debug(
+                                    "Voice Engine: STT chunk: %s",
+                                    chunk[:80],
+                                )
+                                await websocket.send_json({
+                                    "type": "user_transcript",
+                                    "text": chunk,
+                                })
+
+                            if sc.interrupted:
+                                _voice_log.info("Voice Engine: interrupted")
+                                await websocket.send_json(
+                                    {"type": "interrupted"}
+                                )
+                                current_utterance = ""
+
+                            # turn_complete fires after Gemini finishes
+                            # its audio reply. At that point we have the
+                            # full user utterance from input_transcription.
+                            if sc.turn_complete and current_utterance.strip():
+                                utterance = current_utterance.strip()
+                                current_utterance = ""
+                                _voice_log.info(
+                                    "Voice Engine: user said: %s",
+                                    utterance[:100],
+                                )
+
+                                # === ROUTE THROUGH ENGINE ===
+                                try:
+                                    conversation_history.append(
+                                        Message(
+                                            role=Role.USER,
+                                            content=utterance,
+                                        )
+                                    )
+
+                                    # Memory context injection
+                                    messages_for_engine = list(
+                                        conversation_history
+                                    )
+                                    if (
+                                        config_obj is not None
+                                        and memory_backend is not None
+                                        and getattr(
+                                            config_obj.agent,
+                                            "context_from_memory",
+                                            False,
+                                        )
+                                    ):
+                                        try:
+                                            from openjarvis.tools.storage.context import (
+                                                ContextConfig,
+                                                inject_context,
+                                            )
+
+                                            ctx_cfg = ContextConfig(
+                                                top_k=config_obj.memory.context_top_k,
+                                                min_score=config_obj.memory.context_min_score,
+                                                max_context_tokens=config_obj.memory.context_max_tokens,
+                                            )
+                                            messages_for_engine = inject_context(
+                                                utterance,
+                                                messages_for_engine,
+                                                memory_backend,
+                                                config=ctx_cfg,
+                                            )
+                                            _voice_log.info(
+                                                "Voice Engine: memory injected (%d messages)",
+                                                len(messages_for_engine),
+                                            )
+                                        except Exception as exc:
+                                            _voice_log.warning(
+                                                "Voice Engine: memory injection failed: %s",
+                                                exc,
+                                            )
+                                    else:
+                                        _voice_log.info(
+                                            "Voice Engine: no memory injection (config=%s, memory=%s, context_from_memory=%s)",
+                                            config_obj is not None,
+                                            memory_backend is not None,
+                                            getattr(config_obj.agent, "context_from_memory", False)
+                                            if config_obj else "N/A",
+                                        )
+
+                                    model_to_use = (
+                                        engine_model
+                                        or getattr(
+                                            websocket.app.state,
+                                            "model",
+                                            "",
+                                        )
+                                    )
+
+                                    import asyncio as _aio
+                                    loop = _aio.get_running_loop()
+
+                                    response_text = ""
+                                    if (
+                                        managed_agent_manager is not None
+                                        and managed_agent_executor is not None
+                                        and managed_jarvis_agent_id
+                                    ):
+                                        _voice_log.info(
+                                            "Voice Engine: >>> routing to managed Jarvis agent id=%s",
+                                            managed_jarvis_agent_id,
+                                        )
+
+                                        def _run_managed_agent_tick() -> str:
+                                            # Track last agent->user message before this turn
+                                            before = managed_agent_manager.list_messages(
+                                                managed_jarvis_agent_id, limit=20,
+                                            )
+                                            before_latest_ts = max(
+                                                (
+                                                    m.get("created_at", 0.0)
+                                                    for m in before
+                                                    if m.get("direction") == "agent_to_user"
+                                                ),
+                                                default=0.0,
+                                            )
+
+                                            # Queue user utterance and run one managed-agent tick
+                                            managed_agent_manager.send_message(
+                                                managed_jarvis_agent_id,
+                                                content=utterance,
+                                                mode="immediate",
+                                            )
+                                            managed_agent_executor.execute_tick(
+                                                managed_jarvis_agent_id,
+                                            )
+
+                                            # Read newest fresh response from this tick
+                                            after = managed_agent_manager.list_messages(
+                                                managed_jarvis_agent_id, limit=50,
+                                            )
+                                            fresh = [
+                                                m
+                                                for m in after
+                                                if m.get("direction") == "agent_to_user"
+                                                and m.get("created_at", 0.0) > before_latest_ts
+                                            ]
+                                            if fresh:
+                                                fresh.sort(
+                                                    key=lambda m: m.get("created_at", 0.0),
+                                                    reverse=True,
+                                                )
+                                                return str(fresh[0].get("content", "")).strip()
+
+                                            # Fallback to latest response if no timestamp delta found
+                                            for m in after:
+                                                if m.get("direction") == "agent_to_user":
+                                                    return str(m.get("content", "")).strip()
+                                            return ""
+
+                                        response_text = await loop.run_in_executor(
+                                            _VOICE_INFERENCE_EXECUTOR,
+                                            _run_managed_agent_tick,
+                                        )
+
+                                        _voice_log.info(
+                                            "Voice Engine: <<< managed Jarvis response (%d chars)",
+                                            len(response_text),
+                                        )
+
+                                    elif agent is not None:
+                                        _voice_log.info(
+                                            "Voice Engine: >>> calling agent.run() — agent=%s, model=%s, messages=%d",
+                                            getattr(agent, "agent_id", type(agent).__name__),
+                                            model_to_use,
+                                            len(messages_for_engine),
+                                        )
+
+                                        from openjarvis.agents._stubs import AgentContext
+
+                                        def _run_agent_with_context() -> str:
+                                            ctx = AgentContext()
+                                            # Build agent context from prior turns (exclude latest user message)
+                                            for prior in messages_for_engine[:-1]:
+                                                ctx.conversation.add(prior)
+
+                                            user_input = messages_for_engine[-1].content if messages_for_engine else ""
+                                            original_model = getattr(agent, "_model", "")
+                                            if model_to_use:
+                                                agent._model = model_to_use
+                                            try:
+                                                result_obj = agent.run(user_input, context=ctx)
+                                            finally:
+                                                if model_to_use:
+                                                    agent._model = original_model
+
+                                            return result_obj.content or ""
+
+                                        # Use the capped single-worker executor so only one
+                                        # heavy inference job runs at a time across voice sessions.
+                                        response_text = await loop.run_in_executor(
+                                            _VOICE_INFERENCE_EXECUTOR,
+                                            _run_agent_with_context,
+                                        )
+
+                                        _voice_log.info(
+                                            "Voice Engine: <<< agent returned response (%d chars)",
+                                            len(response_text),
+                                        )
+                                    else:
+                                        _voice_log.info(
+                                            "Voice Engine: >>> calling engine.generate() — "
+                                            "engine=%s, model=%s, messages=%d",
+                                            type(engine).__name__,
+                                            model_to_use,
+                                            len(messages_for_engine),
+                                        )
+
+                                        result = await loop.run_in_executor(
+                                            _VOICE_INFERENCE_EXECUTOR,
+                                            lambda: engine.generate(
+                                                messages_for_engine,
+                                                model=model_to_use,
+                                                temperature=0.7,
+                                                max_tokens=512,
+                                            ),
+                                        )
+
+                                        _voice_log.info(
+                                            "Voice Engine: <<< engine returned: type=%s, keys=%s",
+                                            type(result).__name__,
+                                            list(result.keys()) if isinstance(result, dict) else "N/A",
+                                        )
+
+                                        response_text = (
+                                            result.get("content", "")
+                                            if isinstance(result, dict)
+                                            else str(result)
+                                        )
+
+                                    if not response_text:
+                                        _voice_log.warning(
+                                            "Voice Engine: engine returned empty content, result=%s",
+                                            str(result)[:200],
+                                        )
+                                        response_text = (
+                                            "I didn't get a response. "
+                                            "Could you try again?"
+                                        )
+
+                                    _voice_log.info(
+                                        "Voice Engine: response (%d chars): %s",
+                                        len(response_text),
+                                        response_text[:150],
+                                    )
+
+                                    conversation_history.append(
+                                        Message(
+                                            role=Role.ASSISTANT,
+                                            content=response_text,
+                                        )
+                                    )
+
+                                    # Send text transcript
+                                    await websocket.send_json({
+                                        "type": "assistant_transcript",
+                                        "text": response_text,
+                                    })
+
+                                    # TTS: synthesize and send audio
+                                    _voice_log.info(
+                                        "Voice Engine: >>> calling TTS (voice=%s, mode=%s, text=%d chars)",
+                                        voice_name,
+                                        tts_mode,
+                                        len(response_text),
+                                    )
+                                    try:
+                                        audio_pcm = b""
+                                        if tts_mode == "browser-fallback":
+                                            _voice_log.info("Voice Engine: browser-fallback mode selected; skipping server audio synthesis")
+                                        elif tts_mode == "native-audio-repeat":
+                                            # Use Native Audio Dialog as a TTS replacement and
+                                            # stream chunks to the browser as soon as they arrive.
+                                            n_chunks = 0
+                                            async for audio_chunk in _gemini_native_audio_repeat_stream(
+                                                response_text,
+                                                api_key,
+                                                voice_name=voice_name,
+                                                model=live_model,
+                                            ):
+                                                await websocket.send_bytes(audio_chunk)
+                                                n_chunks += 1
+                                            _voice_log.info(
+                                                "Voice Engine: streamed %d native-audio chunks to browser",
+                                                n_chunks,
+                                            )
+                                        else:
+                                            audio_pcm = await _gemini_tts(
+                                                response_text,
+                                                api_key,
+                                                voice_name=voice_name,
+                                                model=tts_model,
+                                            )
+                                        _voice_log.info(
+                                            "Voice Engine: <<< TTS returned %d bytes of audio",
+                                            len(audio_pcm) if audio_pcm else 0,
+                                        )
+                                        if audio_pcm:
+                                            # Send in chunks to allow
+                                            # streaming playback
+                                            chunk_size = 4800  # 100ms @ 24kHz
+                                            n_chunks = 0
+                                            for i in range(
+                                                0, len(audio_pcm), chunk_size
+                                            ):
+                                                await websocket.send_bytes(
+                                                    audio_pcm[i : i + chunk_size]
+                                                )
+                                                n_chunks += 1
+                                            _voice_log.info(
+                                                "Voice Engine: sent %d audio chunks to browser",
+                                                n_chunks,
+                                            )
+                                    except Exception as tts_exc:
+                                        _voice_log.warning(
+                                            "Voice Engine: TTS failed: %s",
+                                            tts_exc,
+                                        )
+                                        try:
+                                            await websocket.send_json({
+                                                "type": "assistant_tts_unavailable",
+                                                "text": response_text,
+                                                "detail": str(tts_exc),
+                                            })
+                                        except Exception:
+                                            pass
+
+                                    await websocket.send_json(
+                                        {"type": "turn_complete"}
+                                    )
+
+                                except Exception as engine_exc:
+                                    _voice_log.error(
+                                        "Voice Engine: engine error: %s",
+                                        engine_exc,
+                                    )
+                                    await websocket.send_json({
+                                        "type": "assistant_transcript",
+                                        "text": f"Engine error: {engine_exc}",
+                                    })
+                                    await websocket.send_json(
+                                        {"type": "turn_complete"}
+                                    )
+
+                        _voice_log.debug(
+                            "Voice Engine: receive() iterator ended, re-entering"
+                        )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    _voice_log.error(
+                        "Voice Engine: STT receive error: %s", exc
+                    )
+                    try:
+                        await websocket.send_json(
+                            {"type": "error", "detail": f"STT error: {exc}"}
+                        )
+                    except Exception:
+                        pass
+
+            fwd_task = asyncio.create_task(forward_to_gemini())
+            proc_task = asyncio.create_task(process_and_respond())
+            try:
+                done, pending = await asyncio.wait(
+                    [fwd_task, proc_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for t in pending:
+                    t.cancel()
+            finally:
+                fwd_task.cancel()
+                proc_task.cancel()
+
+    except WebSocketDisconnect:
+        _voice_log.info("Voice Engine: client disconnected")
+    except Exception as exc:
+        _voice_log.error("Voice Engine: session error: %s", exc)
+        try:
+            await websocket.send_json(
+                {"type": "error", "detail": str(exc)}
+            )
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        _voice_log.info("Voice Engine: session ended")
 
 
 # ---- Feedback routes ----

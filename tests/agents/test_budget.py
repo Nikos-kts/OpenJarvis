@@ -44,12 +44,15 @@ def test_budget_not_exceeded_stays_idle(tmp_path):
 
 
 def test_budget_unlimited_skips_check(tmp_path):
-    """max_cost=0 means unlimited — no budget enforcement."""
+    """Explicit zero cost and token budgets disable budget enforcement."""
     mgr = AgentManager(str(tmp_path / "test.db"))
     bus = EventBus()
     executor = AgentExecutor(mgr, bus)
 
-    agent = mgr.create_agent("unlimited", config={"max_cost": 0})
+    agent = mgr.create_agent(
+        "unlimited",
+        config={"max_cost": 0, "budget_max_tokens": 0},
+    )
     mgr.start_tick(agent["id"])
 
     result = AgentResult(
@@ -64,12 +67,12 @@ def test_budget_unlimited_skips_check(tmp_path):
 
 
 def test_token_budget_exceeded(tmp_path):
-    """Agent exceeding max_tokens gets budget_exceeded."""
+    """Agent exceeding budget_max_tokens gets budget_exceeded."""
     mgr = AgentManager(str(tmp_path / "test.db"))
     bus = EventBus()
     executor = AgentExecutor(mgr, bus)
 
-    agent = mgr.create_agent("token-heavy", config={"max_tokens": 1000})
+    agent = mgr.create_agent("token-heavy", config={"budget_max_tokens": 1000})
     mgr.start_tick(agent["id"])
 
     result = AgentResult(content="done", metadata={"cost": 0.01, "tokens_used": 1500})
@@ -77,4 +80,16 @@ def test_token_budget_exceeded(tmp_path):
 
     updated = mgr.get_agent(agent["id"])
     assert updated["status"] == "budget_exceeded"
+    mgr.close()
+
+
+def test_legacy_max_tokens_normalized_to_generation_cap(tmp_path):
+    """Legacy max_tokens remains a generation limit, not a lifetime budget."""
+    mgr = AgentManager(str(tmp_path / "test.db"))
+
+    agent = mgr.create_agent("legacy", config={"max_tokens": 2048})
+    normalized = mgr.get_agent(agent["id"])
+
+    assert normalized["config"]["generation_max_tokens"] == 2048
+    assert normalized["config"]["budget_max_tokens"] > 2048
     mgr.close()

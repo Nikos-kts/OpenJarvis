@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { AgentMessage, AgentTask, AgentTemplate, AgentTrace, LearningLogEntry, ManagedAgent } from '../../lib/api';
 import {
-  fetchManagedAgents,
-  fetchAgentTasks,
-  fetchAgentMessages,
-  fetchTemplates,
   createManagedAgent,
+  deleteManagedAgent,
+  fetchAgentMessages,
+  fetchManagedAgentTokenPolicyRecommendation,
+  fetchAgentTasks,
+  fetchAgentTraces,
+  fetchLearningLog,
+  fetchManagedAgents,
+  fetchTemplates,
   pauseManagedAgent,
+  recoverManagedAgent,
   resumeManagedAgent,
   runManagedAgent,
-  recoverManagedAgent,
-  deleteManagedAgent,
   sendAgentMessage,
-  fetchLearningLog,
   triggerLearning,
-  fetchAgentTraces,
 } from '../../lib/api';
-import type { ManagedAgent, AgentTask, AgentMessage, AgentTemplate, LearningLogEntry, AgentTrace } from '../../lib/api';
 
 // ---------------------------------------------------------------------------
 // Colors — Catppuccin Mocha
@@ -93,6 +94,16 @@ function formatCost(cost?: number): string {
   return `$${cost.toFixed(3)}`;
 }
 
+function formatTokenCount(value?: number | null): string {
+  if (value === undefined || value === null) return '—';
+  return value.toLocaleString();
+}
+
+function getBudgetMaxTokens(config: Record<string, unknown> | undefined): number {
+  const value = config?.budget_max_tokens;
+  return typeof value === 'number' ? value : Number(value || 0);
+}
+
 // ---------------------------------------------------------------------------
 // Launch Wizard
 // ---------------------------------------------------------------------------
@@ -114,6 +125,8 @@ interface WizardState {
   scheduleValue: string;
   selectedTools: string[];
   budget: string;
+  generationMaxTokens: string;
+  budgetMaxTokens: string;
   learningEnabled: boolean;
 }
 
@@ -136,10 +149,24 @@ function LaunchWizard({
     scheduleValue: '',
     selectedTools: [],
     budget: '',
+    generationMaxTokens: '',
+    budgetMaxTokens: '',
     learningEnabled: false,
   });
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState('');
+  const [tokenRecommendation, setTokenRecommendation] = useState<{ generation_max_tokens: number; budget_max_tokens: number } | null>(null);
+
+  useEffect(() => {
+    fetchManagedAgentTokenPolicyRecommendation().then((rec) => {
+      setTokenRecommendation(rec.recommended);
+      setWizard((current) => ({
+        ...current,
+        generationMaxTokens: current.generationMaxTokens || String(rec.recommended.generation_max_tokens),
+        budgetMaxTokens: current.budgetMaxTokens || String(rec.recommended.budget_max_tokens),
+      }));
+    }).catch(() => { });
+  }, []);
 
   function update(partial: Partial<WizardState>) {
     setWizard((prev) => ({ ...prev, ...partial }));
@@ -168,7 +195,9 @@ function LaunchWizard({
         tools: wizard.selectedTools,
         learning_enabled: wizard.learningEnabled,
       };
-      if (wizard.budget) config.budget = parseFloat(wizard.budget);
+      if (wizard.budget) config.max_cost = parseFloat(wizard.budget);
+      if (wizard.generationMaxTokens) config.generation_max_tokens = parseInt(wizard.generationMaxTokens, 10);
+      if (wizard.budgetMaxTokens) config.budget_max_tokens = parseInt(wizard.budgetMaxTokens, 10);
       await createManagedAgent(apiUrl, {
         name: wizard.name,
         template_id: wizard.templateId || undefined,
@@ -365,6 +394,34 @@ function LaunchWizard({
                     onChange={(e) => update({ budget: e.target.value })}
                   />
                 </div>
+                <div>
+                  <label style={{ display: 'block', color: C.subtext0, fontSize: 12, marginBottom: 6, fontWeight: 500 }}>
+                    Generation Max Tokens
+                  </label>
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    placeholder={tokenRecommendation ? String(tokenRecommendation.generation_max_tokens) : '1536'}
+                    min="256"
+                    step="128"
+                    value={wizard.generationMaxTokens}
+                    onChange={(e) => update({ generationMaxTokens: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: C.subtext0, fontSize: 12, marginBottom: 6, fontWeight: 500 }}>
+                    Runtime Token Budget
+                  </label>
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    placeholder={tokenRecommendation ? String(tokenRecommendation.budget_max_tokens) : '24000'}
+                    min="0"
+                    step="512"
+                    value={wizard.budgetMaxTokens}
+                    onChange={(e) => update({ budgetMaxTokens: e.target.value })}
+                  />
+                </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                   <label style={{
                     display: 'flex', alignItems: 'center', gap: 8,
@@ -380,6 +437,11 @@ function LaunchWizard({
                   </label>
                 </div>
               </div>
+              {tokenRecommendation && (
+                <div style={{ fontSize: 11, color: C.overlay0 }}>
+                  Recommended for this machine: {tokenRecommendation.generation_max_tokens} generation tokens and {formatTokenCount(tokenRecommendation.budget_max_tokens)} runtime tokens.
+                </div>
+              )}
             </div>
           )}
 
@@ -394,6 +456,8 @@ function LaunchWizard({
                   ['Schedule', formatSchedule(wizard.scheduleType, wizard.scheduleValue)],
                   ['Tools', wizard.selectedTools.length > 0 ? wizard.selectedTools.join(', ') : 'None'],
                   ['Budget', wizard.budget ? `$${wizard.budget}` : 'Unlimited'],
+                  ['Generation Tokens', wizard.generationMaxTokens || (tokenRecommendation ? String(tokenRecommendation.generation_max_tokens) : '—')],
+                  ['Runtime Token Budget', wizard.budgetMaxTokens ? formatTokenCount(parseInt(wizard.budgetMaxTokens, 10)) : 'Unlimited'],
                   ['Learning', wizard.learningEnabled ? 'Enabled' : 'Disabled'],
                 ].map(([label, value]) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
@@ -707,6 +771,10 @@ function OverviewTab({ agent, onRun, onPause, onResume, onRecover }: {
           <span style={labelStyle}>Budget</span>
           <span style={valueStyle}>{agent.budget !== undefined ? `$${agent.budget}` : 'Unlimited'}</span>
         </div>
+        <div style={{ ...rowStyle, borderBottom: 'none' }}>
+          <span style={labelStyle}>Runtime Tokens</span>
+          <span style={valueStyle}>{getBudgetMaxTokens(agent.config) > 0 ? `${formatTokenCount(agent.total_tokens)} / ${formatTokenCount(getBudgetMaxTokens(agent.config))}` : 'Unlimited'}</span>
+        </div>
         {/* Budget progress bar */}
         {agent.budget !== undefined && agent.budget > 0 && (
           <div style={{ padding: '8px 0 0 0' }}>
@@ -722,6 +790,21 @@ function OverviewTab({ agent, onRun, onPause, onResume, onRecover }: {
                       : ((agent.total_cost ?? 0) / agent.budget) > 0.75
                         ? C.yellow
                         : C.green,
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
+        {getBudgetMaxTokens(agent.config) > 0 && (
+          <div style={{ padding: '8px 0 0 0' }}>
+            <div style={{ width: '100%', background: C.surface0, borderRadius: 4, height: 6, overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: `${Math.min(100, ((agent.total_tokens ?? 0) / getBudgetMaxTokens(agent.config)) * 100)}%`,
+                  height: '100%',
+                  borderRadius: 4,
+                  background: C.accent,
                   transition: 'width 0.3s ease',
                 }}
               />
@@ -800,14 +883,14 @@ function LearningTabContent({
   const [triggering, setTriggering] = useState(false);
 
   useEffect(() => {
-    fetchLearningLog(apiUrl, agentId).then(setLogs).catch(() => {});
+    fetchLearningLog(apiUrl, agentId).then(setLogs).catch(() => { });
   }, [apiUrl, agentId]);
 
   async function handleTrigger() {
     setTriggering(true);
     try {
       await triggerLearning(apiUrl, agentId);
-      setTimeout(() => fetchLearningLog(apiUrl, agentId).then(setLogs).catch(() => {}), 1000);
+      setTimeout(() => fetchLearningLog(apiUrl, agentId).then(setLogs).catch(() => { }), 1000);
     } catch {
       // ignore
     } finally {
@@ -885,7 +968,7 @@ function LogsTabContent({ apiUrl, agentId }: { apiUrl: string; agentId: string }
   const [traces, setTraces] = useState<AgentTrace[]>([]);
 
   useEffect(() => {
-    fetchAgentTraces(apiUrl, agentId).then(setTraces).catch(() => {});
+    fetchAgentTraces(apiUrl, agentId).then(setTraces).catch(() => { });
   }, [apiUrl, agentId]);
 
   if (traces.length === 0) {
@@ -1060,7 +1143,7 @@ export function AgentsPanel({ apiUrl }: Props) {
   }, [refresh]);
 
   useEffect(() => {
-    fetchTemplates(apiUrl).then(setTemplates).catch(() => {});
+    fetchTemplates(apiUrl).then(setTemplates).catch(() => { });
   }, [apiUrl]);
 
   useEffect(() => {
@@ -1070,28 +1153,28 @@ export function AgentsPanel({ apiUrl }: Props) {
   }, [apiUrl, selectedId]);
 
   const handlePause = useCallback(async (id: string) => {
-    await pauseManagedAgent(apiUrl, id).catch(() => {});
+    await pauseManagedAgent(apiUrl, id).catch(() => { });
     refresh();
   }, [apiUrl, refresh]);
 
   const handleResume = useCallback(async (id: string) => {
-    await resumeManagedAgent(apiUrl, id).catch(() => {});
+    await resumeManagedAgent(apiUrl, id).catch(() => { });
     refresh();
   }, [apiUrl, refresh]);
 
   const handleRun = useCallback(async (id: string) => {
-    await runManagedAgent(apiUrl, id).catch(() => {});
+    await runManagedAgent(apiUrl, id).catch(() => { });
     refresh();
   }, [apiUrl, refresh]);
 
   const handleRecover = useCallback(async (id: string) => {
-    await recoverManagedAgent(apiUrl, id).catch(() => {});
+    await recoverManagedAgent(apiUrl, id).catch(() => { });
     refresh();
   }, [apiUrl, refresh]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Delete this agent? This cannot be undone.')) return;
-    await deleteManagedAgent(apiUrl, id).catch(() => {});
+    await deleteManagedAgent(apiUrl, id).catch(() => { });
     if (selectedId === id) setSelectedId(null);
     refresh();
   }, [apiUrl, selectedId, refresh]);

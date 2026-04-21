@@ -7,6 +7,10 @@ import re as _re
 from typing import Any, Dict, List, Optional, Tuple
 
 from openjarvis.agents.manager import AgentManager
+from openjarvis.agents.token_policy import (
+    normalize_managed_agent_config,
+    recommend_managed_agent_token_policy,
+)
 
 try:
     from fastapi import APIRouter, HTTPException, Request
@@ -634,11 +638,11 @@ async def _stream_managed_agent(
     from openjarvis.core.types import Message, Role
 
     agent_id = agent_record["id"]
-    config = agent_record.get("config", {})
+    config = normalize_managed_agent_config(agent_record.get("config", {}))
     model = config.get("model", getattr(engine, "_model", ""))
     system_prompt = config.get("system_prompt")
     temperature = config.get("temperature", 0.7)
-    max_tokens = config.get("max_tokens", 1024)
+    max_tokens = config.get("generation_max_tokens", 1024)
     max_turns = config.get("max_turns", 10)
 
     # Build conversation messages from history + current input
@@ -1356,6 +1360,10 @@ def create_agent_manager_router(
             kwargs["config"] = req.config
         return manager.update_agent(agent_id, **kwargs)
 
+    @agents_router.get("/token-policy/recommendation")
+    async def token_policy_recommendation(model: str = ""):
+        return recommend_managed_agent_token_policy(model_name=model or "")
+
     @agents_router.delete("/{agent_id}")
     async def delete_agent(agent_id: str):
         if not manager.get_agent(agent_id):
@@ -1387,8 +1395,8 @@ def create_agent_manager_router(
         if agent["status"] == "archived":
             raise HTTPException(status_code=400, detail="Agent is archived")
 
-        # Auto-recover from error/needs_attention state
-        if agent["status"] in ("error", "needs_attention"):
+        # Auto-recover from error/needs_attention/budget_exceeded state
+        if agent["status"] in ("error", "needs_attention", "budget_exceeded"):
             manager.update_agent(agent_id, status="idle")
 
         # Acquire tick BEFORE spawning thread — prevents race

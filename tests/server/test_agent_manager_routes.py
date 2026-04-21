@@ -38,11 +38,8 @@ class TestAgentManagerRoutes:
 
         app = FastAPI()
         routers = create_agent_manager_router(manager)
-        agents_router, templates_router, global_router, tools_router = routers
-        app.include_router(agents_router)
-        app.include_router(templates_router)
-        app.include_router(global_router)
-        app.include_router(tools_router)
+        for router in routers:
+            app.include_router(router)
         return TestClient(app)
 
     def test_list_agents_empty(self, client):
@@ -62,6 +59,21 @@ class TestAgentManagerRoutes:
         data = resp.json()
         assert data["name"] == "researcher"
         assert data["status"] == "idle"
+        assert data["config"]["generation_max_tokens"] > 0
+        assert data["config"]["budget_max_tokens"] > 0
+
+    def test_create_agent_normalizes_legacy_max_tokens(self, client):
+        resp = client.post(
+            "/v1/managed-agents",
+            json={
+                "name": "legacy",
+                "config": {"max_tokens": 2048},
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config"]["generation_max_tokens"] == 2048
+        assert data["config"]["budget_max_tokens"] > 2048
 
     def test_get_agent(self, client):
         create_resp = client.post("/v1/managed-agents", json={"name": "test"})
@@ -73,6 +85,13 @@ class TestAgentManagerRoutes:
     def test_get_agent_not_found(self, client):
         resp = client.get("/v1/managed-agents/nonexistent")
         assert resp.status_code == 404
+
+    def test_token_policy_recommendation(self, client):
+        resp = client.get("/v1/managed-agents/token-policy/recommendation")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["recommended"]["generation_max_tokens"] > 0
+        assert data["recommended"]["budget_max_tokens"] > data["recommended"]["generation_max_tokens"]
 
     def test_update_agent(self, client):
         create_resp = client.post("/v1/managed-agents", json={"name": "old"})
@@ -287,11 +306,8 @@ class TestAgentManagerStreaming:
         app.state.bus = None
 
         routers = create_agent_manager_router(manager)
-        agents_router, templates_router, global_router, tools_router = routers
-        app.include_router(agents_router)
-        app.include_router(templates_router)
-        app.include_router(global_router)
-        app.include_router(tools_router)
+        for router in routers:
+            app.include_router(router)
         return TestClient(app)
 
     def test_send_message_stream(self, manager, stream_client):

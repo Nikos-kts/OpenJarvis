@@ -50,6 +50,14 @@ def serve(
     """Start the OpenAI-compatible API server."""
     console = Console(stderr=True)
 
+    # Enable INFO-level logging for openjarvis modules so clap_boot_service,
+    # clap_detector, and other subsystem messages reach the console.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+
     # Check for server dependencies
     try:
         import uvicorn  # noqa: F401
@@ -107,14 +115,26 @@ def serve(
     import os
     from pathlib import Path
 
+    def _load_env_file(path: Path) -> None:
+        if not path.exists():
+            return
+        for _raw in path.read_text().splitlines():
+            _line = _raw.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _k, _v = _line.split("=", 1)
+            _value = _v.strip()
+            if len(_value) >= 2 and _value[0] == _value[-1] and _value[0] in {'"', "'"}:
+                _value = _value[1:-1]
+            os.environ.setdefault(_k.strip(), _value)
+
+    # 0. local .env files from the current workspace
+    for _env_name in (".env", ".env.local"):
+        _load_env_file(Path.cwd() / _env_name)
+
     # 1. cloud-keys.env (cloud provider API keys)
     _cloud_keys_path = Path.home() / ".openjarvis" / "cloud-keys.env"
-    if _cloud_keys_path.exists():
-        for _raw in _cloud_keys_path.read_text().splitlines():
-            _line = _raw.strip()
-            if _line and not _line.startswith("#") and "=" in _line:
-                _k, _v = _line.split("=", 1)
-                os.environ.setdefault(_k.strip(), _v.strip())
+    _load_env_file(_cloud_keys_path)
 
     # 2. credentials.toml (tool/channel credentials)
     from openjarvis.core.credentials import inject_credentials
@@ -246,6 +266,8 @@ def serve(
             console.print(f"[yellow]Agent '{agent_key}' failed to load: {exc}[/yellow]")
             traceback.print_exc()
 
+    _wire_system = None
+
     # Set up channel backend if enabled
     channel_bridge = None
     if config.channel.enabled and config.channel.default_channel:
@@ -355,6 +377,7 @@ def serve(
 
     # Set up agent scheduler for cron/interval agents
     agent_scheduler = None
+    executor = None
     if agent_manager is not None:
         try:
             from openjarvis.agents.executor import AgentExecutor
@@ -395,6 +418,36 @@ def serve(
             console.print("  Scheduler: [cyan]active[/cyan]")
         except Exception as exc:
             logger.debug("Agent scheduler init failed: %s", exc)
+
+    # ── Clap-activated boot routine ──
+    clap_boot_service = None
+    if agent_manager is not None and executor is not None:
+        try:
+            from openjarvis.speech.clap_boot_service import ClapBootService
+
+            clap_boot_service = ClapBootService(
+                manager=agent_manager,
+                executor=executor,
+                bus=bus,
+            )
+            # start() reads persisted mode from ~/.openjarvis/wake-mode.json
+            clap_boot_service.start()
+            if clap_boot_service.running:
+                _mode = clap_boot_service.mode
+                if _mode == "clap":
+                    console.print("  Wake mode: [cyan]double-clap[/cyan]")
+                elif _mode == "auto":
+                    console.print(
+                        f"  Wake mode: [cyan]auto[/cyan] "
+                        f"(delay {clap_boot_service.auto_delay:.0f}s)"
+                    )
+                else:
+                    console.print("  Wake mode: [yellow]off[/yellow]")
+                console.print(f"  TTS model: [cyan]{clap_boot_service.tts_model}[/cyan]")
+            else:
+                console.print("  Wake mode: [yellow]skipped[/yellow] (no jarvis agent or deps missing)")
+        except Exception as exc:
+            logger.debug("Clap boot service init failed: %s", exc)
 
     # Set up memory backend for context injection
     memory_backend = None
@@ -489,10 +542,56 @@ def serve(
         speech_backend=speech_backend,
         agent_manager=agent_manager,
         agent_scheduler=agent_scheduler,
+        agent_executor=executor,
         api_key=api_key,
         webhook_config=webhook_config,
         cors_origins=config.server.cors_origins,
     )
+
+    def _cleanup_for_frontend_termination() -> None:
+        logger.info("Frontend termination cleanup requested from clap service")
+
+        try:
+            if agent_scheduler is not None:
+                agent_scheduler.stop()
+        except Exception:
+            logger.debug("Agent scheduler shutdown failed", exc_info=True)
+
+        try:
+            if channel_bridge is not None and hasattr(channel_bridge, "disconnect"):
+                channel_bridge.disconnect()
+        except Exception:
+            logger.debug("Channel bridge disconnect failed", exc_info=True)
+
+        try:
+            if agent_manager is not None:
+                for ag in agent_manager.list_agents():
+                    if ag.get("status") == "running":
+                        agent_manager.update_agent(
+                            ag["id"],
+                            status="idle",
+                            current_activity="",
+                        )
+        except Exception:
+            logger.debug("Managed agent cleanup failed", exc_info=True)
+
+        try:
+            exec_system = getattr(executor, "_system", None) if executor is not None else None
+            if exec_system is not None:
+                exec_system.close()
+        except Exception:
+            logger.debug("Executor system cleanup failed", exc_info=True)
+
+        try:
+            if _wire_system is not None:
+                _wire_system.close()
+        except Exception:
+            logger.debug("Channel wiring system cleanup failed", exc_info=True)
+
+    # Expose clap boot service so the /v1/speech/wake-mode API can reach it
+    if clap_boot_service is not None:
+        clap_boot_service.set_shutdown_callback(_cleanup_for_frontend_termination)
+        app.state.clap_boot_service = clap_boot_service
 
     console.print(
         f"[green]Starting OpenJarvis API server[/green]\n"
@@ -518,5 +617,18 @@ def serve(
         )
 
     import uvicorn
+
+    # ── Quieten noisy polling endpoints in uvicorn access logs ──
+    import logging as _logging
+
+    _QUIET_PATHS = ("/health", "/v1/models", "/v1/info", "/v1/savings",
+                    "/v1/managed-agents")
+
+    class _QuietAccessFilter(_logging.Filter):
+        def filter(self, record: _logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return not any(p in msg for p in _QUIET_PATHS)
+
+    _logging.getLogger("uvicorn.access").addFilter(_QuietAccessFilter())
 
     uvicorn.run(app, host=bind_host, port=bind_port, log_level="info")

@@ -14,6 +14,7 @@ from openjarvis.agents.errors import (
     classify_error,
     retry_delay,
 )
+from openjarvis.agents.token_policy import normalize_managed_agent_config
 from openjarvis.core.events import EventBus, EventType
 
 if TYPE_CHECKING:
@@ -105,13 +106,19 @@ class AgentExecutor:
             self._manager.start_tick(agent_id)
             self._set_activity(agent_id, "Preparing tick...")
         except ValueError:
-            logger.warning("Agent %s already running, skipping tick", agent_id)
+            logger.warning("[agent:%s] Skipping tick — agent is already running", agent_id)
             return
 
         agent = self._manager.get_agent(agent_id)
         if agent is None:
-            logger.error("Agent %s not found", agent_id)
+            logger.error("[agent:%s] Tick aborted — agent record not found in DB", agent_id)
             return
+
+        logger.info(
+            "[agent:%s] (%s) ── TICK START ──────────────────────────────",
+            agent["id"],
+            agent["name"],
+        )
 
         self._bus.publish(
             EventType.AGENT_TICK_START,
@@ -167,6 +174,12 @@ class AgentExecutor:
             result = self._run_with_retries(agent)
         except AgentTickError as e:
             error_info = e
+            logger.error(
+                "[agent:%s] (%s) Tick raised unrecoverable error: %s",
+                agent["id"],
+                agent["name"],
+                e,
+            )
         finally:
             self._bus.unsubscribe(EventType.TOOL_CALL_START, _on_activity)
             self._bus.unsubscribe(EventType.INFERENCE_START, _on_activity)
@@ -194,6 +207,14 @@ class AgentExecutor:
         last_error: AgentTickError | None = None
 
         for attempt in range(_MAX_RETRIES):
+            if attempt > 0:
+                logger.info(
+                    "[agent:%s] (%s) Retry attempt %d/%d",
+                    agent["id"],
+                    agent["name"],
+                    attempt + 1,
+                    _MAX_RETRIES,
+                )
             try:
                 return self._invoke_agent(agent)
             except AgentTickError as e:
@@ -201,9 +222,10 @@ class AgentExecutor:
                     raise
                 last_error = e
                 delay = retry_delay(attempt)
-                logger.info(
-                    "Agent %s tick retry %d/%d in %ds: %s",
+                logger.warning(
+                    "[agent:%s] (%s) Retryable error on attempt %d/%d (retry in %ds): %s",
                     agent["id"],
+                    agent["name"],
                     attempt + 1,
                     _MAX_RETRIES,
                     delay,
@@ -215,9 +237,10 @@ class AgentExecutor:
                 if not classified.retryable or attempt == _MAX_RETRIES - 1:
                     raise classified from e
                 delay = retry_delay(attempt)
-                logger.info(
-                    "Agent %s tick retry %d/%d in %ds: %s",
+                logger.warning(
+                    "[agent:%s] (%s) Exception on attempt %d/%d (retry in %ds): %s",
                     agent["id"],
+                    agent["name"],
                     attempt + 1,
                     _MAX_RETRIES,
                     delay,
@@ -237,7 +260,7 @@ class AgentExecutor:
         if agent_cls is None:
             raise FatalError(f"Unknown agent type: {agent_type}")
 
-        config = agent.get("config", {})
+        config = normalize_managed_agent_config(agent.get("config", {}))
 
         # Resolve engine + model from JarvisSystem
         engine = self._system.engine if self._system else None
@@ -248,9 +271,9 @@ class AgentExecutor:
             raise FatalError("No model configured for agent")
 
         logger.info(
-            "Agent %s [%s]: using model=%s, engine=%s",
-            agent["name"],
+            "[agent:%s] (%s) Model: %s  Engine: %s",
             agent["id"],
+            agent["name"],
             model,
             type(engine).__name__,
         )
@@ -305,10 +328,19 @@ class AgentExecutor:
                         logger.warning("Failed to instantiate tool %s", tname)
             if tool_instances:
                 logger.info(
-                    "Agent %s: resolved %d/%d tools",
+                    "[agent:%s] (%s) Tools loaded (%d/%d): %s",
+                    agent["id"],
                     agent["name"],
                     len(tool_instances),
                     len(tool_names),
+                    ", ".join(tool_names),
+                )
+            elif tool_names:
+                logger.warning(
+                    "[agent:%s] (%s) None of the configured tools could be loaded: %s",
+                    agent["id"],
+                    agent["name"],
+                    ", ".join(tool_names),
                 )
 
         # Construct agent instance
@@ -316,12 +348,26 @@ class AgentExecutor:
         sys_prompt = config.get("system_prompt")
         if sys_prompt is not None:
             agent_kwargs["system_prompt"] = sys_prompt
+        temperature = config.get("temperature")
+        if temperature is not None:
+            agent_kwargs["temperature"] = temperature
+        generation_max_tokens = config.get("generation_max_tokens")
+        if generation_max_tokens is not None:
+            agent_kwargs["max_tokens"] = generation_max_tokens
         if getattr(agent_cls, "accepts_tools", False) and tool_instances:
             agent_kwargs["tools"] = tool_instances
         try:
             agent_instance = agent_cls(engine, model, **agent_kwargs)
         except TypeError:
-            agent_instance = agent_cls(engine, model)
+            fallback_kwargs = {
+                key: value
+                for key, value in agent_kwargs.items()
+                if key not in {"temperature", "max_tokens"}
+            }
+            try:
+                agent_instance = agent_cls(engine, model, **fallback_kwargs)
+            except TypeError:
+                agent_instance = agent_cls(engine, model)
 
         # Build input from instruction + summary_memory + pending messages
         import datetime
@@ -343,17 +389,26 @@ class AgentExecutor:
             for m in pending:
                 self._manager.mark_message_delivered(m["id"])
             logger.info(
-                "Agent %s: delivering %d pending message(s)",
+                "[agent:%s] (%s) Delivering %d pending message(s):",
+                agent["id"],
                 agent["name"],
                 len(pending),
             )
+            for m in pending:
+                logger.info(
+                    "[agent:%s] (%s)   > %s",
+                    agent["id"],
+                    agent["name"],
+                    m["content"][:200],
+                )
             self._set_activity(
                 agent["id"],
                 f"Delivering {len(pending)} message(s)...",
             )
         else:
             logger.info(
-                "Agent %s: no pending messages, running with instruction only",
+                "[agent:%s] (%s) No pending messages — running with standing instruction",
+                agent["id"],
                 agent["name"],
             )
 
@@ -397,6 +452,12 @@ class AgentExecutor:
                         r for r in results if r.score >= ctx_cfg.min_score
                     ]
                     if memory_results:
+                        logger.info(
+                            "[agent:%s] (%s) Memory retrieval: %d results injected into context",
+                            agent["id"],
+                            agent["name"],
+                            len(memory_results),
+                        )
                         # Prepend retrieved context to input for agents
                         # that don't inspect AgentContext.memory_results
                         retrieved = format_context(memory_results)
@@ -404,15 +465,23 @@ class AgentExecutor:
                             f"Retrieved context from knowledge base:\n"
                             f"{retrieved}\n\n{input_text}"
                         )
+                    else:
+                        logger.debug(
+                            "[agent:%s] (%s) Memory retrieval: no results above min_score threshold",
+                            agent["id"],
+                            agent["name"],
+                        )
             except Exception:
                 pass  # Don't break agent tick if memory retrieval fails
 
         agent_ctx.memory_results = memory_results
         self._set_activity(agent["id"], "Generating response...")
         logger.info(
-            "Agent %s: calling agent.run() with %d chars input",
+            "[agent:%s] (%s) ── Invoking agent.run() ── input_len=%d chars, instruction=%r",
+            agent["id"],
             agent["name"],
             len(input_text),
+            (config.get("instruction", "") or "")[:120],
         )
         _t0 = time.time()
         result = agent_instance.run(input_text, context=agent_ctx)
@@ -425,21 +494,33 @@ class AgentExecutor:
                 "Retrying (empty response)...",
             )
             logger.warning(
-                "Agent %s: empty content, retrying once",
+                "[agent:%s] (%s) Empty response received — retrying once",
+                agent["id"],
                 agent["name"],
             )
             result = agent_instance.run(input_text, context=agent_ctx)
 
         _elapsed = time.time() - _t0
         logger.info(
-            "Agent %s: agent.run() completed in %.1fs, "
-            "content_len=%d, turns=%d, tokens=%s",
+            "[agent:%s] (%s) agent.run() finished in %.1fs — "
+            "turns=%d, tokens=%s (in=%s, out=%s), cost=$%.4f, content_len=%d",
+            agent["id"],
             agent["name"],
             _elapsed,
-            len(result.content or ""),
             result.turns,
             result.metadata.get("total_tokens", "?"),
+            result.metadata.get("prompt_tokens", "?"),
+            result.metadata.get("completion_tokens", "?"),
+            result.metadata.get("cost", 0.0),
+            len(result.content or ""),
         )
+        if result.content:
+            logger.info(
+                "[agent:%s] (%s) Response preview: %r",
+                agent["id"],
+                agent["name"],
+                result.content[:300],
+            )
         return result
 
     def _build_error_detail(self, error: AgentTickError) -> dict[str, Any]:
@@ -482,7 +563,7 @@ class AgentExecutor:
         if error is None:
             # Success
             logger.info(
-                "Tick succeeded for agent %s in %.1fs, response_len=%d",
+                "[agent:%s] Tick SUCCEEDED in %.1fs — response_len=%d",
                 agent_id,
                 duration,
                 len(result.content or "") if result else 0,
@@ -523,15 +604,24 @@ class AgentExecutor:
             # Budget enforcement (post-tick check)
             agent_data = self._manager.get_agent(agent_id)
             if agent_data:
-                config = agent_data.get("config", {})
-                max_cost = config.get("max_cost", 0)
-                max_tokens = config.get("max_tokens", 0)
+                config = normalize_managed_agent_config(agent_data.get("config", {}))
+                max_cost = config.get("max_cost") or config.get("budget", 0)
+                max_tokens = config.get("budget_max_tokens", 0)
                 exceeded = False
                 if max_cost > 0 and agent_data["total_cost"] > max_cost:
                     exceeded = True
                 if max_tokens > 0 and agent_data["total_tokens"] > max_tokens:
                     exceeded = True
                 if exceeded:
+                    logger.warning(
+                        "[agent:%s] BUDGET EXCEEDED — total_cost=$%.4f (limit=$%.2f), "
+                        "total_tokens=%d (limit=%d)",
+                        agent_id,
+                        agent_data["total_cost"],
+                        max_cost,
+                        agent_data["total_tokens"],
+                        max_tokens,
+                    )
                     self._manager.update_agent(agent_id, status="budget_exceeded")
                     self._bus.publish(
                         EventType.AGENT_BUDGET_EXCEEDED,
@@ -551,9 +641,22 @@ class AgentExecutor:
                     "status": "ok",
                 },
             )
+            agent_data_after = self._manager.get_agent(agent_id)
+            if agent_data_after:
+                logger.info(
+                    "[agent:%s] ── TICK END ── %.1fs | runs=%d | "
+                    "tokens=%d (in=%d, out=%d) | cost=$%.4f cumulative",
+                    agent_id,
+                    duration,
+                    agent_data_after.get("total_runs", 0),
+                    agent_data_after.get("total_tokens", 0),
+                    agent_data_after.get("input_tokens", 0),
+                    agent_data_after.get("output_tokens", 0),
+                    agent_data_after.get("total_cost", 0.0),
+                )
         elif isinstance(error, EscalateError):
             logger.warning(
-                "Tick escalated for agent %s after %.1fs: %s",
+                "[agent:%s] Tick ESCALATED after %.1fs (needs_attention): %s",
                 agent_id,
                 duration,
                 error,
@@ -571,7 +674,7 @@ class AgentExecutor:
             )
         else:
             logger.error(
-                "Tick failed for agent %s after %.1fs: %s",
+                "[agent:%s] Tick FAILED after %.1fs: %s",
                 agent_id,
                 duration,
                 error,

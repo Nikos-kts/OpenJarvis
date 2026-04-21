@@ -16,11 +16,25 @@ import { getBase } from '../lib/api';
 
 export type VoiceLiveState = 'idle' | 'connecting' | 'active';
 
+export type VoiceMode = 'gemini' | 'engine';
+
 interface UseVoiceLiveOptions {
     /** Gemini voice persona */
     voice?: string;
     /** Gemini Live model identifier */
     model?: string;
+    /** Voice mode: 'gemini' = pure Gemini, 'engine' = STT→engine→TTS */
+    mode?: VoiceMode;
+    /** Model for the OpenJarvis engine (engine mode only) */
+    engineModel?: string;
+    /** Gemini Live model used for STT in engine mode */
+    engineSttModel?: string;
+    /** TTS strategy in engine mode */
+    engineTtsMode?: 'gemini-tts' | 'native-audio-repeat' | 'browser-fallback';
+    /** Gemini TTS model when using server-side Gemini TTS */
+    engineTtsModel?: string;
+    /** Playback speed multiplier for assistant audio (1.0 = normal) */
+    playbackSpeed?: number;
     /** Called with each chunk of user transcript */
     onUserTranscript?: (text: string) => void;
     /** Called with each chunk of assistant transcript */
@@ -131,15 +145,18 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
             setUserText('');
             setAssistantText('');
 
+            const mode = optsRef.current.mode || 'gemini';
+
             try {
                 // 1. Mic permission
                 console.log('[VoiceLive] Acquiring microphone...');
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 streamRef.current = stream;
 
-                // 2. WebSocket
-                const wsUrl = `${getWsBase()}/v1/voice/live`;
-                console.log('[VoiceLive] Connecting:', wsUrl);
+                // 2. WebSocket — route based on mode
+                const wsPath = mode === 'engine' ? '/v1/voice/engine' : '/v1/voice/live';
+                const wsUrl = `${getWsBase()}${wsPath}`;
+                console.log(`[VoiceLive] Connecting (${mode}):`, wsUrl);
                 const ws = new WebSocket(wsUrl);
                 ws.binaryType = 'arraybuffer';
                 wsRef.current = ws;
@@ -151,14 +168,25 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
                 });
 
                 // 3. Config
-                ws.send(
-                    JSON.stringify({
-                        type: 'config',
-                        voice: voice || optsRef.current.voice || 'Kore',
-                        model: model || optsRef.current.model || 'gemini-2.5-flash-native-audio-latest',
-                        system: 'You are Jarvis, a helpful and concise AI assistant.',
-                    }),
-                );
+                const configMsg: Record<string, string> = {
+                    type: 'config',
+                    voice: voice || optsRef.current.voice || 'Kore',
+                    model: model || optsRef.current.model || 'gemini-2.5-flash-native-audio-latest',
+                    system: 'You are Jarvis, an advanced AI assistant. Speak in a calm, refined, confident British butler tone. Be polite, slightly formal, subtly witty, helpful, and composed.',
+                };
+                if (mode === 'engine' && optsRef.current.engineModel) {
+                    configMsg.engine_model = optsRef.current.engineModel;
+                }
+                if (mode === 'engine' && optsRef.current.engineSttModel) {
+                    configMsg.stt_model = optsRef.current.engineSttModel;
+                }
+                if (mode === 'engine' && optsRef.current.engineTtsMode) {
+                    configMsg.tts_mode = optsRef.current.engineTtsMode;
+                }
+                if (mode === 'engine' && optsRef.current.engineTtsModel) {
+                    configMsg.tts_model = optsRef.current.engineTtsModel;
+                }
+                ws.send(JSON.stringify(configMsg));
 
                 // 4. Playback context
                 let playCtx = new AudioContext({ sampleRate: PLAYBACK_RATE });
@@ -191,6 +219,7 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
                 // 5. Server messages
                 ws.onmessage = (event) => {
                     if (event.data instanceof ArrayBuffer) {
+                        const speed = Math.max(0.5, Math.min(2.0, optsRef.current.playbackSpeed || 1.0));
                         const pcm16 = new Int16Array(event.data);
                         const float32 = new Float32Array(pcm16.length);
                         for (let i = 0; i < pcm16.length; i++) {
@@ -200,11 +229,12 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
                         buffer.getChannelData(0).set(float32);
                         const src = playCtx.createBufferSource();
                         src.buffer = buffer;
+                        src.playbackRate.value = speed;
                         src.connect(playCtx.destination);
                         const now = playCtx.currentTime;
                         const startAt = Math.max(now, nextPlayTimeRef.current);
                         src.start(startAt);
-                        nextPlayTimeRef.current = startAt + buffer.duration;
+                        nextPlayTimeRef.current = startAt + (buffer.duration / speed);
                     } else {
                         try {
                             const msg = JSON.parse(event.data);
@@ -221,6 +251,20 @@ export function useVoiceLive(opts: UseVoiceLiveOptions = {}) {
                             } else if (msg.type === 'assistant_transcript') {
                                 setAssistantText((prev: string) => prev + msg.text);
                                 optsRef.current.onAssistantTranscript?.(msg.text);
+                            } else if (msg.type === 'assistant_tts_unavailable') {
+                                // Fallback path when server-side Gemini TTS is quota-limited
+                                // or temporarily unavailable: speak locally in the browser.
+                                const text = String(msg.text || '').trim();
+                                if (text && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                                    try {
+                                        const utter = new SpeechSynthesisUtterance(text);
+                                        utter.rate = Math.max(0.5, Math.min(2.0, optsRef.current.playbackSpeed || 1.0));
+                                        window.speechSynthesis.cancel();
+                                        window.speechSynthesis.speak(utter);
+                                    } catch (ttsErr) {
+                                        console.warn('[VoiceLive] Browser TTS fallback failed:', ttsErr);
+                                    }
+                                }
                             } else if (msg.type === 'turn_complete') {
                                 optsRef.current.onTurnComplete?.();
                                 setUserText('');

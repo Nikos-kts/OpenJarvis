@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from openjarvis.agents.token_policy import normalize_managed_agent_config
 
 _CREATE_AGENTS = """\
 CREATE TABLE IF NOT EXISTS managed_agents (
@@ -124,6 +125,14 @@ class AgentManager:
                 pass  # Column already exists
         self._conn.commit()
 
+        # Reset any agents left in 'running' state from a previous crash/restart.
+        # They cannot actually be running since we just started.
+        self._conn.execute(
+            "UPDATE managed_agents SET status = 'idle', current_activity = '' "
+            "WHERE status = 'running'"
+        )
+        self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()
 
@@ -137,7 +146,7 @@ class AgentManager:
     ) -> Dict[str, Any]:
         agent_id = uuid.uuid4().hex[:12]
         now = time.time()
-        config_json = json.dumps(config or {})
+        config_json = json.dumps(normalize_managed_agent_config(config))
         self._conn.execute(
             "INSERT INTO managed_agents"
             " (id, name, agent_type, config_json,"
@@ -171,7 +180,7 @@ class AgentManager:
                 vals.append(kwargs[key])
         if "config" in kwargs:
             sets.append("config_json = ?")
-            vals.append(json.dumps(kwargs["config"]))
+            vals.append(json.dumps(normalize_managed_agent_config(kwargs["config"])))
         total_runs_increment = kwargs.get("total_runs_increment", 0)
         if total_runs_increment:
             sets.append("total_runs = total_runs + ?")
@@ -679,7 +688,7 @@ class AgentManager:
             "id": row["id"],
             "name": row["name"],
             "agent_type": row["agent_type"],
-            "config": json.loads(config_raw) if config_raw else {},
+            "config": normalize_managed_agent_config(json.loads(config_raw) if config_raw else {}),
             "status": row["status"],
             "summary_memory": row["summary_memory"] or "",
             "created_at": row["created_at"],

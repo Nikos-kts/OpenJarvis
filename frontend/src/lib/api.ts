@@ -40,7 +40,7 @@ const getSettingsApiUrl = (): string => {
       const parsed = JSON.parse(raw);
       if (parsed.apiUrl) return parsed.apiUrl.replace(/\/+$/, '');
     }
-  } catch {}
+  } catch { }
   return '';
 };
 
@@ -103,6 +103,34 @@ export async function fetchModels(): Promise<ModelInfo[]> {
 export async function fetchRecommendedModel(): Promise<{ model: string; reason: string }> {
   const res = await fetch(`${getBase()}/v1/recommended-model`);
   if (!res.ok) return { model: '', reason: 'Failed to fetch' };
+  return res.json();
+}
+
+export interface ManagedAgentTokenPolicyRecommendation {
+  recommended_profile: string;
+  recommended: {
+    generation_max_tokens: number;
+    budget_max_tokens: number;
+  };
+  profiles: Record<string, {
+    generation_max_tokens: number;
+    budget_max_tokens: number;
+  }>;
+  machine: {
+    platform: string;
+    cpu_brand: string;
+    ram_gb: number;
+    gpu_vendor: string;
+    gpu_name: string;
+    available_memory_gb: number;
+  };
+  notes: string[];
+}
+
+export async function fetchManagedAgentTokenPolicyRecommendation(model = ''): Promise<ManagedAgentTokenPolicyRecommendation> {
+  const query = model ? `?model=${encodeURIComponent(model)}` : '';
+  const res = await fetch(`${getBase()}/v1/managed-agents/token-policy/recommendation${query}`);
+  if (!res.ok) throw new Error(`Failed to fetch token policy recommendation: ${res.status}`);
   return res.json();
 }
 
@@ -204,7 +232,7 @@ export async function fetchEnergy(): Promise<unknown> {
   if (isTauri()) {
     try {
       return await tauriInvoke('fetch_energy', { apiUrl: getBase() });
-    } catch {}
+    } catch { }
   }
   const res = await fetch(`${getBase()}/v1/telemetry/energy`);
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
@@ -215,7 +243,7 @@ export async function fetchTelemetry(): Promise<unknown> {
   if (isTauri()) {
     try {
       return await tauriInvoke('fetch_telemetry', { apiUrl: getBase() });
-    } catch {}
+    } catch { }
   }
   const res = await fetch(`${getBase()}/v1/telemetry/stats`);
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
@@ -226,7 +254,7 @@ export async function fetchTraces(limit: number = 50): Promise<unknown> {
   if (isTauri()) {
     try {
       return await tauriInvoke('fetch_traces', { apiUrl: getBase(), limit });
-    } catch {}
+    } catch { }
   }
   const res = await fetch(`${getBase()}/v1/traces?limit=${limit}`);
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
@@ -282,6 +310,40 @@ export async function fetchSpeechHealth(): Promise<SpeechHealth> {
   }
   const res = await fetch(`${getBase()}/v1/speech/health`);
   if (!res.ok) return { available: false };
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Wake Mode
+// ---------------------------------------------------------------------------
+
+export interface WakeModeStatus {
+  mode: 'clap' | 'auto' | 'off';
+  auto_delay: number;
+  tts_model: string;
+  tts_models: string[];
+  playback_speed: number;
+  running: boolean;
+  jarvis_agent_id: string | null;
+}
+
+export async function fetchWakeMode(): Promise<WakeModeStatus> {
+  const res = await fetch(`${getBase()}/v1/speech/wake-mode`);
+  if (!res.ok) return { mode: 'off', auto_delay: 5, tts_model: 'gemini-2.5-flash-preview-tts', tts_models: [], playback_speed: 1.0, running: false, jarvis_agent_id: null };
+  return res.json();
+}
+
+export async function updateWakeMode(mode: string, autoDelay?: number, ttsModel?: string, playbackSpeed?: number): Promise<WakeModeStatus> {
+  const body: Record<string, unknown> = { mode };
+  if (autoDelay !== undefined) body.auto_delay = autoDelay;
+  if (ttsModel !== undefined) body.tts_model = ttsModel;
+  if (playbackSpeed !== undefined) body.playback_speed = playbackSpeed;
+  const res = await fetch(`${getBase()}/v1/speech/wake-mode`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update wake mode');
   return res.json();
 }
 
