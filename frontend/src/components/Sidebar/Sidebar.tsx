@@ -1,26 +1,26 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router';
 import {
-  MessageSquare,
-  Plus,
   BarChart3,
-  Settings,
-  Search,
-  PanelLeftClose,
-  PanelLeft,
-  Cpu,
-  Rocket,
   Bot,
+  Cpu,
+  Database,
+  Loader2,
+  MessageSquare,
+  Monitor,
+  Moon,
+  PanelLeft,
+  PanelLeftClose,
+  Plus,
+  Rocket,
+  ScrollText,
+  Search,
+  Settings,
   Sparkles,
   Sun,
-  Moon,
-  Monitor,
-  Loader2,
-  ScrollText,
-  Database,
 } from 'lucide-react';
-import { ConversationList } from './ConversationList';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { useAppStore } from '../../lib/store';
+import { ConversationList } from './ConversationList';
 
 export function Sidebar() {
   const navigate = useNavigate();
