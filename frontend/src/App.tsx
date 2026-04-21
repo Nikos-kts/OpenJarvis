@@ -13,6 +13,7 @@ import { ChatPage } from './pages/ChatPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DataSourcesPage } from './pages/DataSourcesPage';
 import { GetStartedPage } from './pages/GetStartedPage';
+import { JarvisPage } from './pages/JarvisPage';
 import { LogsPage } from './pages/LogsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -173,6 +174,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<ChatPage />} />
+          <Route path="jarvis" element={<JarvisPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="get-started" element={<GetStartedPage />} />

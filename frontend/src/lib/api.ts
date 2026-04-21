@@ -785,6 +785,101 @@ export async function fetchErrorAgents(): Promise<ManagedAgent[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Jarvis primary (the central Brain agent)
+// ---------------------------------------------------------------------------
+
+export interface JarvisPrimaryConfig {
+  model?: string;
+  preferred_engine?: string;
+  description?: string;
+  tools?: string[];
+  max_turns?: number;
+  temperature?: number;
+  generation_max_tokens?: number;
+  system_prompt?: string;
+  visible_to_brain?: boolean;
+  delegation_tags?: string[];
+  persona?: {
+    tone?: string;
+    verbosity?: 'concise' | 'balanced' | 'detailed' | string;
+    proactive_level?: 'low' | 'medium' | 'high' | string;
+    wake_phrase?: string;
+  };
+  intent?: {
+    policy?: 'heuristic' | 'hybrid' | 'llm' | string;
+    confidence_threshold?: number;
+    clarify_max_rounds?: number;
+  };
+  voice?: {
+    enabled?: boolean;
+    realtime?: boolean;
+    tts_voice?: string;
+    live_model?: string;
+    silence_seconds?: number;
+  };
+  wake?: {
+    enabled?: boolean;
+    mode?: 'clap' | 'wakeword' | 'off' | string;
+    phrase?: string;
+  };
+  delegation?: {
+    visible_to_brain?: boolean;
+    tags?: string[];
+  };
+  [key: string]: unknown;
+}
+
+export interface JarvisPrimaryRecord {
+  id: string;
+  name: string;
+  agent_type: string;
+  status?: string;
+  config: JarvisPrimaryConfig;
+  [key: string]: unknown;
+}
+
+export async function fetchJarvisPrimary(): Promise<JarvisPrimaryRecord | null> {
+  const res = await fetch(`${getBase()}/v1/jarvis/primary`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchJarvisPrimaryConfig(): Promise<{
+  agent_id: string;
+  name: string;
+  config: JarvisPrimaryConfig;
+} | null> {
+  const res = await fetch(`${getBase()}/v1/jarvis/primary/config`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function patchJarvisPrimaryConfig(
+  partial: Partial<JarvisPrimaryConfig>,
+): Promise<{ agent_id: string; config: JarvisPrimaryConfig }> {
+  const res = await fetch(`${getBase()}/v1/jarvis/primary/config`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config: partial }),
+  });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function resetJarvisPrimaryConfig(): Promise<{
+  agent_id: string;
+  config: JarvisPrimaryConfig;
+}> {
+  const res = await fetch(`${getBase()}/v1/jarvis/primary/reset`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Agent Learning + Traces
 // ---------------------------------------------------------------------------
 
