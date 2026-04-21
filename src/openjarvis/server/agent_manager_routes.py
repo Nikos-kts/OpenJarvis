@@ -645,13 +645,23 @@ async def _stream_managed_agent(
     max_tokens = config.get("generation_max_tokens", 1024)
     max_turns = config.get("max_turns", 10)
 
+    # Resolve agent type early so we can inject a built-in persona prompt
+    # when the config doesn't override one. Persisted edits always win.
+    agent_type = agent_record.get("agent_type", "")
+    if not system_prompt and agent_type == "jarvis":
+        try:
+            from openjarvis.agents.jarvis import JARVIS_SYSTEM_PROMPT
+
+            system_prompt = JARVIS_SYSTEM_PROMPT
+        except Exception:  # pragma: no cover - defensive
+            pass
+
     # Build conversation messages from history + current input
     llm_messages: List[Message] = []
     if system_prompt:
         llm_messages.append(Message(role=Role.SYSTEM, content=system_prompt))
 
     # Resolve agent type and class for DeepResearch tool wiring
-    agent_type = agent_record.get("agent_type", "")
     if agent_type == "deep_research":
         dr_tools = _build_deep_research_tools(
             engine=engine,

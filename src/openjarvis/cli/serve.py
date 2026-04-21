@@ -375,6 +375,29 @@ def serve(
         except Exception as exc:
             logger.debug("Agent manager init failed: %s", exc)
 
+    # Auto-bootstrap a default Jarvis managed agent if missing. Required for
+    # ClapBootService (wake word) to arm and for the Brain to have a default
+    # delegate. Controlled by config.agent_manager.auto_bootstrap_jarvis.
+    if agent_manager is not None and getattr(
+        config.agent_manager, "auto_bootstrap_jarvis", True
+    ):
+        try:
+            from openjarvis.agents.bootstrap import ensure_default_jarvis_agent
+
+            _agent, _created = ensure_default_jarvis_agent(
+                agent_manager,
+                model=model_name or config.intelligence.default_model,
+                preferred_engine=engine_name
+                or config.intelligence.preferred_engine
+                or config.engine.default,
+            )
+            if _created:
+                console.print(
+                    f"  Jarvis agent: [green]bootstrapped[/green] (id={_agent['id']})"
+                )
+        except Exception as exc:
+            logger.debug("Jarvis agent auto-bootstrap failed: %s", exc)
+
     # Set up agent scheduler for cron/interval agents
     agent_scheduler = None
     executor = None

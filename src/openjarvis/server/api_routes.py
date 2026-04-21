@@ -2086,6 +2086,14 @@ def include_all_routes(app) -> None:
             app.include_router(global_r)
             app.include_router(tools_r)
             app.include_router(sendblue_r)
+
+            from openjarvis.server.jarvis_primary_routes import (  # noqa: PLC0415
+                create_jarvis_primary_router,
+            )
+
+            app.include_router(
+                create_jarvis_primary_router(app.state.agent_manager)
+            )
     except ImportError:
         pass
 

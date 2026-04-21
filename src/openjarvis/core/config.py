@@ -1240,6 +1240,10 @@ class AgentManagerConfig:
 
     enabled: bool = True
     db_path: str = str(DEFAULT_CONFIG_DIR / "agents.db")
+    # Auto-create a default managed agent of type ``jarvis`` on first
+    # startup if none exists. Required for the wake-word / ClapBootService
+    # to arm, and gives the chat/voice pipelines a default orchestrator.
+    auto_bootstrap_jarvis: bool = True
 
 
 @dataclass(slots=True)

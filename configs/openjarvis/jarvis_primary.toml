@@ -1,0 +1,64 @@
+# ────────────────────────────────────────────────────────────────
+# First-run defaults for the primary Jarvis managed agent.
+#
+# This file is read ONCE, the first time the server starts with an
+# empty managed_agents database (or whenever no row of agent_type='jarvis'
+# exists yet). After that, edits are persisted to the database and this
+# TOML is no longer consulted. Deleting the row and restarting will
+# re-bootstrap from this file.
+#
+# All sections are optional. Anything missing is filled in from the
+# built-in defaults in ``openjarvis.agents.bootstrap``.
+# ────────────────────────────────────────────────────────────────
+
+[general]
+name        = "Jarvis"
+description = "Primary Jarvis orchestrator — acts as the central brain, delegating to other managed agents and tools."
+
+[persona]
+tone            = "calm, refined, confident British butler"
+verbosity       = "balanced"               # concise | balanced | detailed
+proactive_level = "medium"                 # low | medium | high
+wake_phrase     = "At your service"
+
+[model]
+# Leave ``name`` empty to inherit the server's default model at bootstrap
+# time. ``preferred_engine`` likewise inherits the server's engine choice.
+name             = ""
+provider         = "ollama"
+preferred_engine = ""
+
+[tools]
+# Allow-list of built-in tools Jarvis may call. Add or remove freely.
+allow = [
+  "web_search",
+  "file_read",
+  "calculator",
+  "think",
+]
+
+[intent]
+policy               = "hybrid"            # heuristic | hybrid | llm
+confidence_threshold = 0.55
+clarify_max_rounds   = 1
+
+[voice]
+enabled        = true
+realtime       = true                      # full-duplex Gemini Live
+tts_voice      = "Kore"
+live_model     = "gemini-live-2.5-flash-preview"
+silence_seconds = 30
+
+[wake]
+enabled = true
+mode    = "clap"                           # clap | wakeword | off
+phrase  = "jarvis"
+
+[delegation]
+visible_to_brain = true
+tags             = ["chat", "general"]
+
+[runtime]
+max_turns             = 8
+temperature           = 0.3
+generation_max_tokens = 2048
