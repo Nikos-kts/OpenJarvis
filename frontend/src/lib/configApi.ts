@@ -71,7 +71,7 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
     let detail: unknown = undefined;
     try {
       detail = await res.json();
-    } catch {}
+    } catch { }
     throw new ConfigApiError(res.status, detail);
   }
   return res.json() as Promise<T>;
