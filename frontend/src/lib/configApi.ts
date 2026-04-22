@@ -34,6 +34,7 @@ export interface ConfigFieldSchema {
   secret?: boolean;
   advanced?: boolean;
   restart_required?: boolean;
+  enum?: string[];
   properties?: Record<string, ConfigFieldSchema>;
 }
 

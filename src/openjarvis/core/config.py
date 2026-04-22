@@ -1359,6 +1359,42 @@ class DigestConfig:
     )
 
 
+@dataclass(slots=True)
+class VoiceConfig:
+    """Voice pipeline settings (Gemini Live-first architecture).
+
+    Phase 2 exposes provider selection, API credentials, and audio knobs
+    so everything shows up in the Speech Settings tab automatically.
+    Providers beyond Gemini (Deepgram, local) will be added in Phase 4.
+    """
+
+    enabled: bool = False
+    # Provider dropdown — extend this tuple as more providers graduate from
+    # Phase 4; the schema layer turns ``metadata["enum"]`` into a <select>.
+    provider: str = field(
+        default="gemini",
+        metadata={"enum": ["gemini"]},
+    )
+    # Gemini Live API key — stored in config.toml, masked in HTTP responses.
+    gemini_api_key: str = ""
+    # Gemini Live model identifier.
+    gemini_model: str = field(
+        default="gemini-live-2.5-flash-preview",
+        metadata={
+            "enum": [
+                "gemini-live-2.5-flash-preview",
+                "gemini-2.0-flash-live-001",
+            ]
+        },
+    )
+    # STT language hint (BCP-47, e.g. "en-US", "el-GR").  Empty = auto-detect.
+    language: str = "en-US"
+    # Voice Activity Detection sensitivity (0.0–1.0; higher = less sensitive).
+    vad_threshold: float = 0.5
+    # Audio capture sample rate passed to the Rust audio daemon (Hz).
+    sample_rate: int = 16000
+
+
 @dataclass
 class JarvisConfig:
     """Top-level configuration for OpenJarvis."""
@@ -1388,6 +1424,7 @@ class JarvisConfig:
     compression: CompressionConfig = field(default_factory=CompressionConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
+    speech: VoiceConfig = field(default_factory=VoiceConfig)
 
     @property
     def memory(self) -> StorageConfig:
@@ -1597,6 +1634,7 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
             "optimize",
             "agent_manager",
             "digest",
+            "speech",
         )
         for section_name in top_sections:
             if section_name in data:
@@ -1930,6 +1968,7 @@ __all__ = [
     "ToolsConfig",
     "TracesConfig",
     "VLLMEngineConfig",
+    "VoiceConfig",
     "WebChatChannelConfig",
     "WebhookChannelConfig",
     "WhatsAppBaileysChannelConfig",

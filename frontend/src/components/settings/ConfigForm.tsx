@@ -362,6 +362,25 @@ function FieldInput({ field, value, readonly, onChange }: FieldInputProps) {
         );
     }
 
+    // Enum: render a <select> dropdown.
+    if (field.enum && field.enum.length > 0) {
+        return (
+            <select
+                className="w-64 px-2 py-1 rounded text-xs font-mono"
+                style={style}
+                value={(value as string) ?? field.enum[0]}
+                disabled={readonly}
+                onChange={(e) => onChange(e.target.value)}
+            >
+                {field.enum.map((opt) => (
+                    <option key={opt} value={opt}>
+                        {opt}
+                    </option>
+                ))}
+            </select>
+        );
+    }
+
     if (field.type === 'boolean') {
         return (
             <input

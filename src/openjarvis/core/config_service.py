@@ -271,7 +271,7 @@ _SECTION_TITLES: Dict[str, str] = {
     "sessions": "Sessions",
     "a2a": "Agent-to-Agent",
     "operators": "Operators",
-    "speech": "Speech",
+    "speech": "Speech Settings",
     "optimize": "Optimize",
     "agent_manager": "Agent Manager",
     "memory_files": "Memory Files",
@@ -327,6 +327,11 @@ def _field_schema(
         for p in _RESTART_REQUIRED_PREFIXES
     ):
         entry["restart_required"] = True
+
+    # Enum options declared via field(metadata={"enum": [...]}).
+    enum_opts = fld.metadata.get("enum") if hasattr(fld, "metadata") else None
+    if enum_opts:
+        entry["enum"] = list(enum_opts)
 
     return entry
 
