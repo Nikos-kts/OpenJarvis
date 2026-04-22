@@ -103,7 +103,7 @@ class ClaudeCodeAgent(BaseAgent):
                 "Install it from https://nodejs.org/ or via your package manager."
             )
 
-        dest = Path("openJarvis") / "claude_code_runner"
+        dest = Path(".openJarvis") / "claude_code_runner"
         dest.mkdir(parents=True, exist_ok=True)
 
         # Copy runner files if missing or outdated

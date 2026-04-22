@@ -16,7 +16,7 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 _LOCK = threading.Lock()
-_DEFAULT_PATH = Path("openJarvis") / "credentials.toml"
+_DEFAULT_PATH = Path(".openJarvis") / "credentials.toml"
 
 TOOL_CREDENTIALS: dict[str, list[str]] = {
     "web_search": ["TAVILY_API_KEY"],

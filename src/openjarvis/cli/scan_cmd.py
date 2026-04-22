@@ -132,7 +132,7 @@ class PrivacyScanner:
     def check_icloud_sync(self) -> ScanResult:
         """Check whether ~/.openjarvis is inside iCloud Drive sync scope."""
         try:
-            config_path = Path("openJarvis").resolve()
+            config_path = Path(".openJarvis").resolve()
             icloud_path = Path("~/Library/Mobile Documents/").expanduser().resolve()
             if str(config_path).startswith(str(icloud_path)):
                 return ScanResult(

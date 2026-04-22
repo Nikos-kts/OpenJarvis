@@ -72,7 +72,7 @@ def _builtin_templates_dir() -> Path:
 
 def _user_templates_dir() -> Path:
     """Return the path to user-defined templates (~/.openjarvis/templates/agents/)."""
-    return Path("openJarvis") / "templates" / "agents"
+    return Path(".openJarvis") / "templates" / "agents"
 
 
 def discover_templates(

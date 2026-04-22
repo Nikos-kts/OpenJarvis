@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _openjarvis_home() -> Path:
     """Resolve $OPENJARVIS_HOME, defaulting to ./openJarvis."""
-    return Path(os.environ.get("OPENJARVIS_HOME", "openJarvis"))
+    return Path(os.environ.get("OPENJARVIS_HOME", ".openJarvis"))
 
 
 def load_system_prompt_override(agent_name: str) -> str | None:

@@ -24,8 +24,8 @@ except ModuleNotFoundError:
 _PROJECT_RECIPES_DIR = Path(__file__).resolve().parent / "data"
 _PROJECT_OPERATORS_DIR = _PROJECT_RECIPES_DIR / "operators"
 # User-level directories
-_USER_RECIPES_DIR = Path("openJarvis") / "recipes"
-_USER_OPERATORS_DIR = Path("openJarvis") / "operators"
+_USER_RECIPES_DIR = Path(".openJarvis") / "recipes"
+_USER_OPERATORS_DIR = Path(".openJarvis") / "operators"
 
 
 @dataclass(slots=True)

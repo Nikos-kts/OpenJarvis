@@ -8,9 +8,9 @@ use crate::hardware::{detect_hardware, recommend_engine, HardwareInfo};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Default config directory: `./openJarvis/`
+/// Default config directory: `./.openJarvis/`
 pub fn default_config_dir() -> PathBuf {
-    PathBuf::from("openJarvis")
+    PathBuf::from(".openJarvis")
 }
 
 /// Default config file path: `~/.openjarvis/config.toml`
@@ -860,7 +860,7 @@ pub struct OperatorsConfig {
     pub auto_activate: String,
 }
 
-fn default_operators_dir() -> String { "openJarvis/operators".into() }
+fn default_operators_dir() -> String { ".openJarvis/operators".into() }
 
 // ---------------------------------------------------------------------------
 // Channel configs (kept minimal — channels stay in Python)

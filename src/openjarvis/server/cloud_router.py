@@ -21,7 +21,7 @@ from openjarvis.core.types import Message
 # Key / provider detection
 # ---------------------------------------------------------------------------
 
-_CLOUD_ENV_FILE = Path("openJarvis") / "cloud-keys.env"
+_CLOUD_ENV_FILE = Path(".openJarvis") / "cloud-keys.env"
 
 _OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 _ANTHROPIC_PREFIXES = ("claude-",)
