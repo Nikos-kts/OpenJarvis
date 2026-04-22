@@ -3,7 +3,7 @@ API     := curl -sf $(URL)
 FMT     := python3 -m json.tool 2>/dev/null
 UV      := source $$HOME/.local/bin/env 2>/dev/null; uv
 
-.PHONY: install build start stop restart logs status health \
+.PHONY: install build start debug stop restart logs status health \
         info models agents sessions memory skills traces channels \
         connectors telemetry energy savings budget voice-health \
         security chat ollama-check check help
@@ -31,6 +31,13 @@ start:
 	$(UV) run jarvis serve --port 8000
 	@echo "Stopped."
 
+## debug        – start backend in DEBUG log level + frontend
+debug:
+	@echo "Starting OpenJarvis in debug mode..."
+	@(cd frontend && npm run dev) &
+	$(UV) run jarvis --verbose serve --port 8000
+	@echo "Stopped."
+
 ## stop         – stop any running processes on ports 8000/5173
 stop:
 	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
@@ -44,7 +51,7 @@ restart: stop
 
 ## logs         – tail server logs (follow mode)
 logs:
-	@tail -f ~/.openjarvis/logs/server.log 2>/dev/null || echo "No log file found — server writes to stdout by default"
+	@tail -f .openJarvis/cli.log 2>/dev/null || echo "No log file found — run 'make debug' first to generate logs"
 
 ## status       – show running Jarvis processes
 status:
