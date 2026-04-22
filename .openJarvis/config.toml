@@ -10,7 +10,7 @@ default = "ollama"
 # host = "http://localhost:11434"  # set to remote URL if engine runs elsewhere
 
 [intelligence]
-default_model = "qwen3.5:9b"
+default_model = "qwen2.5:7b"
 
 [agent]
 default_agent = "simple"
