@@ -13,6 +13,7 @@ Supports two modes:
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import re
 from typing import Any, List, Optional
 
@@ -22,6 +23,8 @@ from openjarvis.core.registry import AgentRegistry
 from openjarvis.core.types import Message, Role, ToolCall, ToolResult
 from openjarvis.engine._stubs import InferenceEngine
 from openjarvis.tools._stubs import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 @AgentRegistry.register("orchestrator")
@@ -82,6 +85,13 @@ class OrchestratorAgent(ToolUsingAgent):
         context: Optional[AgentContext] = None,
         **kwargs: Any,
     ) -> AgentResult:
+        logger.info(
+            "OrchestratorAgent.run: mode=%s input=%d chars tools=%d max_turns=%d",
+            self._mode,
+            len(input),
+            len(self._tools),
+            self._max_turns,
+        )
         if self._mode == "structured":
             return self._run_structured(input, context, **kwargs)
         return self._run_function_calling(input, context, **kwargs)
@@ -121,11 +131,18 @@ class OrchestratorAgent(ToolUsingAgent):
 
             result = self._generate(messages)
             content = result.get("content", "")
+            logger.debug(
+                "[structured] Turn %d/%d: got %d chars",
+                turns,
+                self._max_turns,
+                len(content),
+            )
 
             parsed = self._parse_structured_response(content)
 
             # FINAL_ANSWER -> done
             if parsed["final_answer"]:
+                logger.info("[structured] FINAL_ANSWER after %d turns", turns)
                 self._emit_turn_end(turns=turns)
                 return AgentResult(
                     content=parsed["final_answer"],
@@ -135,6 +152,11 @@ class OrchestratorAgent(ToolUsingAgent):
 
             # TOOL -> execute
             if parsed["tool"]:
+                logger.info(
+                    "[structured] Tool call: %s input=%s",
+                    parsed["tool"],
+                    (parsed["input"] or "")[:80],
+                )
                 messages.append(Message(role=Role.ASSISTANT, content=content))
 
                 tool_call = ToolCall(
@@ -144,12 +166,18 @@ class OrchestratorAgent(ToolUsingAgent):
                 )
                 tool_result = self._executor.execute(tool_call)
                 all_tool_results.append(tool_result)
+                logger.debug(
+                    "[structured] Tool result: success=%s content=%d chars",
+                    tool_result.success,
+                    len(tool_result.content),
+                )
 
                 observation = f"Observation: {tool_result.content}"
                 messages.append(Message(role=Role.USER, content=observation))
                 continue
 
             # Neither -> treat content as final answer
+            logger.info("[structured] No tool/answer parsed, returning content after %d turns", turns)
             self._emit_turn_end(turns=turns)
             return AgentResult(
                 content=content,
@@ -157,6 +185,7 @@ class OrchestratorAgent(ToolUsingAgent):
                 turns=turns,
             )
 
+        logger.warning("[structured] Max turns (%d) exceeded without FINAL_ANSWER", self._max_turns)
         # Max turns exceeded
         return self._max_turns_result(all_tool_results, turns)
 
@@ -218,6 +247,12 @@ class OrchestratorAgent(ToolUsingAgent):
 
         # Get OpenAI-format tool definitions
         openai_tools = self._executor.get_openai_tools() if self._tools else []
+        logger.debug(
+            "[fc] Starting function-calling loop: tools=%d max_turns=%d model=%s",
+            len(openai_tools),
+            self._max_turns,
+            self._model,
+        )
 
         all_tool_results: list[ToolResult] = []
         turns = 0
@@ -244,11 +279,23 @@ class OrchestratorAgent(ToolUsingAgent):
 
             content = result.get("content", "")
             raw_tool_calls = result.get("tool_calls", [])
+            logger.debug(
+                "[fc] Turn %d result: tool_calls=%d content=%d chars",
+                turns,
+                len(raw_tool_calls),
+                len(content),
+            )
 
             # No tool calls -> check continuation, then final answer
             if not raw_tool_calls:
                 content = self._check_continuation(result, messages)
                 content = self._strip_think_tags(content)
+                logger.info(
+                    "[fc] Final answer after %d turns (%d prompt + %d completion tokens)",
+                    turns,
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                )
                 self._emit_turn_end(turns=turns, content_length=len(content))
                 return AgentResult(
                     content=content,
@@ -282,6 +329,11 @@ class OrchestratorAgent(ToolUsingAgent):
 
             # Execute each tool (with loop guard check) and append results
             if self._parallel_tools and len(tool_calls) > 1:
+                logger.info(
+                    "[fc] Executing %d tools in parallel: %s",
+                    len(tool_calls),
+                    [tc.name for tc in tool_calls],
+                )
                 # Parallel execution
                 def _exec_tool(tc: ToolCall) -> tuple:
                     if self._loop_guard:
@@ -310,6 +362,12 @@ class OrchestratorAgent(ToolUsingAgent):
                 for tc in tool_calls:
                     _, tool_result = results_map[id(tc)]
                     all_tool_results.append(tool_result)
+                    logger.debug(
+                        "[fc] Tool %s result: success=%s content=%d chars",
+                        tc.name,
+                        tool_result.success,
+                        len(tool_result.content),
+                    )
                     messages.append(
                         Message(
                             role=Role.TOOL,
@@ -319,6 +377,11 @@ class OrchestratorAgent(ToolUsingAgent):
                         )
                     )
             else:
+                logger.info(
+                    "[fc] Executing %d tool(s) sequentially: %s",
+                    len(tool_calls),
+                    [tc.name for tc in tool_calls],
+                )
                 # Sequential execution
                 for tc in tool_calls:
                     # Loop guard check before execution
@@ -328,6 +391,11 @@ class OrchestratorAgent(ToolUsingAgent):
                             tc.arguments,
                         )
                         if verdict.blocked:
+                            logger.warning(
+                                "[fc] Loop guard blocked tool %s: %s",
+                                tc.name,
+                                verdict.reason,
+                            )
                             tool_result = ToolResult(
                                 tool_name=tc.name,
                                 content=f"Loop guard: {verdict.reason}",
@@ -346,6 +414,12 @@ class OrchestratorAgent(ToolUsingAgent):
 
                     tool_result = self._executor.execute(tc)
                     all_tool_results.append(tool_result)
+                    logger.debug(
+                        "[fc] Tool %s result: success=%s content=%d chars",
+                        tc.name,
+                        tool_result.success,
+                        len(tool_result.content),
+                    )
 
                     # Append tool response message
                     messages.append(
@@ -359,6 +433,12 @@ class OrchestratorAgent(ToolUsingAgent):
 
         # Max turns exceeded
         final_content = self._strip_think_tags(content) if content else ""
+        logger.warning(
+            "[fc] Max turns (%d) exceeded without final answer (prompt=%d completion=%d tokens)",
+            self._max_turns,
+            total_prompt_tokens,
+            total_completion_tokens,
+        )
         self._emit_turn_end(turns=turns, max_turns_exceeded=True)
         return AgentResult(
             content=final_content or "Maximum turns reached without a final answer.",

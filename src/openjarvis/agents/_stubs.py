@@ -8,6 +8,7 @@ base for agents that accept tools.
 
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from openjarvis.core.config import load_config
 from openjarvis.core.events import EventBus, EventType
 from openjarvis.core.types import Conversation, Message, Role, ToolResult
 from openjarvis.engine._stubs import InferenceEngine
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -159,6 +162,12 @@ class BaseAgent(ABC):
         if context and context.conversation.messages:
             messages.extend(context.conversation.messages)
         messages.append(Message(role=Role.USER, content=input))
+        logger.debug(
+            "Built messages: system=%s history=%d total=%d",
+            "yes" if effective_system_prompt else "no",
+            len(context.conversation.messages) if context else 0,
+            len(messages),
+        )
         return messages
 
     def _generate(self, messages: list[Message], **extra_kwargs: Any) -> dict:
@@ -168,6 +177,14 @@ class BaseAgent(ABC):
         Publishes INFERENCE_START/END events on the bus when the engine
         does not publish its own (i.e. non-instrumented engines).
         """
+        logger.debug(
+            "Calling engine.generate: model=%s messages=%d temperature=%.2f max_tokens=%d extra=%s",
+            self._model,
+            len(messages),
+            self._temperature,
+            self._max_tokens,
+            list(extra_kwargs.keys()) or "none",
+        )
         if self._bus and not getattr(self._engine, "_publishes_events", False):
             engine_id = getattr(self._engine, "engine_id", "")
             self._bus.publish(
@@ -196,6 +213,14 @@ class BaseAgent(ABC):
                 },
             )
 
+        usage = result.get("usage", {})
+        logger.debug(
+            "engine.generate result: prompt_tokens=%d completion_tokens=%d finish=%s tool_calls=%d",
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            result.get("finish_reason", "?"),
+            len(result.get("tool_calls") or []),
+        )
         return result
 
     def _max_turns_result(

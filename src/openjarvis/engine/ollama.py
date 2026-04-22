@@ -55,6 +55,13 @@ class OllamaEngine(InferenceEngine):
         max_tokens: int = 1024,
         **kwargs: Any,
     ) -> Dict[str, Any]:
+        logger.debug(
+            "[ollama] generate: model=%s messages=%d temperature=%.2f max_tokens=%d",
+            model,
+            len(messages),
+            temperature,
+            max_tokens,
+        )
         msg_dicts = messages_to_dicts(messages)
         # Ollama expects tool_call arguments as dicts, not JSON strings
         for md in msg_dicts:
@@ -101,10 +108,12 @@ class OllamaEngine(InferenceEngine):
             resp = self._client.post("/api/chat", json=payload)
             if resp.status_code == 400 and tools:
                 # Model may not support function calling -- retry without tools
+                logger.warning("[ollama] Tools rejected (400) for model=%s, retrying without tools", model)
                 payload.pop("tools", None)
                 resp = self._client.post("/api/chat", json=payload)
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            logger.error("[ollama] Not reachable at %s: %s", self._host, exc)
             raise EngineConnectionError(
                 f"Ollama not reachable at {self._host}"
             ) from exc
@@ -150,6 +159,12 @@ class OllamaEngine(InferenceEngine):
             )
             if k in data
         }
+        logger.debug(
+            "[ollama] response: prompt_tokens=%d (eval=%d) completion_tokens=%d finish=stop",
+            prompt_tokens,
+            prompt_tokens_evaluated,
+            completion_tokens,
+        )
         # Extract tool calls if present
         raw_tool_calls = data.get("message", {}).get("tool_calls", [])
         if raw_tool_calls:

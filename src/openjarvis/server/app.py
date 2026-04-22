@@ -179,6 +179,13 @@ def create_app(
         version="0.1.0",
     )
 
+    logger.info(
+        "Creating FastAPI app: engine=%s model=%s agent=%s",
+        engine_name or getattr(engine, "engine_id", type(engine).__name__),
+        model or "(none)",
+        agent_name or (getattr(agent, "agent_id", None) if agent else None) or "(none)",
+    )
+
     from fastapi.middleware.cors import CORSMiddleware
 
     _origins = cors_origins if cors_origins is not None else ["*"]
@@ -217,6 +224,7 @@ def create_app(
         if cfg.traces.enabled:
             _trace_store = TraceStore(db_path=cfg.traces.db_path)
             app.state.trace_store = _trace_store
+            logger.info("TraceStore enabled: db=%s", cfg.traces.db_path)
             _bus = getattr(app.state, "bus", None)
             if _bus is not None:
                 _trace_store.subscribe_to_bus(_bus)

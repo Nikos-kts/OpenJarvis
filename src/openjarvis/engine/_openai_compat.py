@@ -46,6 +46,14 @@ class _OpenAICompatibleEngine(InferenceEngine):
         max_tokens: int = 1024,
         **kwargs: Any,
     ) -> Dict[str, Any]:
+        logger.debug(
+            "[%s] generate: model=%s messages=%d temperature=%.2f max_tokens=%d",
+            self.engine_id,
+            model,
+            len(messages),
+            temperature,
+            max_tokens,
+        )
         payload: Dict[str, Any] = {
             "model": model,
             "messages": messages_to_dicts(messages),
@@ -61,11 +69,13 @@ class _OpenAICompatibleEngine(InferenceEngine):
             url = f"{self._api_prefix}/chat/completions"
             resp = self._client.post(url, json=payload)
             if resp.status_code == 400 and "tools" in payload:
+                logger.warning("[%s] Tools rejected (400) for model=%s, retrying without tools", self.engine_id, model)
                 payload.pop("tools", None)
                 payload.pop("tool_choice", None)
                 resp = self._client.post(url, json=payload)
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            logger.error("[%s] Engine not reachable at %s: %s", self.engine_id, self._host, exc)
             raise EngineConnectionError(
                 f"{self.engine_id} engine not reachable at {self._host}"
             ) from exc
@@ -99,6 +109,13 @@ class _OpenAICompatibleEngine(InferenceEngine):
             "model": data.get("model", model),
             "finish_reason": choice.get("finish_reason", "stop"),
         }
+        logger.debug(
+            "[%s] response: prompt_tokens=%d completion_tokens=%d finish=%s",
+            self.engine_id,
+            prompt_tokens,
+            completion_tokens,
+            result["finish_reason"],
+        )
         # Extract tool calls if present
         raw_tool_calls = choice["message"].get("tool_calls", [])
         if raw_tool_calls:

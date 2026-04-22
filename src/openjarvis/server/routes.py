@@ -25,6 +25,7 @@ from openjarvis.server.models import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _to_messages(chat_messages) -> list[Message]:
@@ -49,6 +50,13 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     engine = request.app.state.engine
     agent = getattr(request.app.state, "agent", None)
     model = request_body.model
+
+    logger.info(
+        "Chat completion request: model=%s stream=%s messages=%d",
+        model,
+        request_body.stream,
+        len(request_body.messages),
+    )
 
     # Inject memory context into messages before dispatching
     config = getattr(request.app.state, "config", None)
@@ -97,11 +105,15 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
                             )
                         )
                     request_body.messages = new_msgs
+                    logger.debug(
+                        "Memory context enriched: %d → %d messages",
+                        len(messages),
+                        len(enriched),
+                    )
+                else:
+                    logger.debug("Memory context: no relevant context found (top_k=%d)", ctx_cfg.top_k)
         except Exception:
-            logging.getLogger("openjarvis.server").debug(
-                "Memory context injection failed",
-                exc_info=True,
-            )
+            logger.debug("Memory context injection failed", exc_info=True)
 
     # Run complexity analysis on the last user message
     complexity_info = None
@@ -131,11 +143,14 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
             # the client requested — never reduce below the request value.
             if suggested > request_body.max_tokens:
                 request_body.max_tokens = suggested
-        except Exception:
-            logging.getLogger("openjarvis.server").debug(
-                "Complexity analysis failed",
-                exc_info=True,
+            logger.debug(
+                "Complexity analysis: score=%.3f tier=%s suggested_max_tokens=%d",
+                cr.score,
+                cr.tier,
+                suggested,
             )
+        except Exception:
+            logger.debug("Complexity analysis failed", exc_info=True)
 
     if request_body.stream:
         bus = getattr(request.app.state, "bus", None)
@@ -144,13 +159,17 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
         # so it can't stream tokens in real-time).  For plain chat, stream
         # directly from the engine for true token-by-token output.
         if agent is not None and bus is not None and request_body.tools:
+            logger.info("Routing → agent_stream (agent=%s tools=%d)", getattr(agent, 'agent_id', '?'), len(request_body.tools or []))
             return await _handle_agent_stream(agent, bus, model, request_body)
+        logger.info("Routing → stream (model=%s)", model)
         return await _handle_stream(engine, model, request_body, complexity_info)
 
     # Non-streaming: use agent if available, otherwise direct engine call
     if agent is not None:
+        logger.info("Routing → agent (agent=%s model=%s)", getattr(agent, 'agent_id', '?'), model)
         return _handle_agent(agent, model, request_body, complexity_info)
 
+    logger.info("Routing → direct engine (model=%s)", model)
     bus = getattr(request.app.state, "bus", None)
     return _handle_direct(
         engine,
@@ -169,6 +188,13 @@ def _handle_direct(
     complexity_info=None,
 ) -> ChatCompletionResponse:
     """Direct engine call without agent."""
+    logger.debug(
+        "Direct generate: model=%s messages=%d temperature=%.2f max_tokens=%d",
+        model,
+        len(req.messages),
+        req.temperature,
+        req.max_tokens,
+    )
     messages = _to_messages(req.messages)
     kwargs: dict[str, Any] = {}
     if req.tools:
@@ -195,6 +221,12 @@ def _handle_direct(
         )
     content = result.get("content", "")
     usage = result.get("usage", {})
+    logger.info(
+        "Direct response: prompt_tokens=%d completion_tokens=%d finish=%s",
+        usage.get("prompt_tokens", 0),
+        usage.get("completion_tokens", 0),
+        result.get("finish_reason", "?"),
+    )
 
     choice_msg = ChoiceMessage(role="assistant", content=content)
     # Include tool calls if present
@@ -248,6 +280,14 @@ def _handle_agent(
     # Last message is the input
     input_text = req.messages[-1].content if req.messages else ""
 
+    logger.info(
+        "Agent run: agent=%s model=%s input=%d chars history=%d messages",
+        getattr(agent, 'agent_id', '?'),
+        model,
+        len(input_text),
+        len(ctx.conversation.messages),
+    )
+
     # Override agent model for this request if the caller specified one
     original_model = agent._model
     if model:
@@ -256,6 +296,14 @@ def _handle_agent(
         result = agent.run(input_text, context=ctx)
     finally:
         agent._model = original_model
+
+    logger.info(
+        "Agent response: %d chars turns=%d prompt_tokens=%d completion_tokens=%d",
+        len(result.content),
+        result.turns,
+        result.metadata.get("prompt_tokens", 0),
+        result.metadata.get("completion_tokens", 0),
+    )
 
     usage = UsageInfo(
         prompt_tokens=result.metadata.get("prompt_tokens", 0),
