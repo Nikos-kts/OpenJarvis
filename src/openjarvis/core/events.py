@@ -7,6 +7,7 @@ react without direct coupling.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -16,6 +17,8 @@ from typing import Any, Callable, Dict, List, Optional  # noqa: I001
 # ---------------------------------------------------------------------------
 # Event taxonomy
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
 
 
 class EventType(str, Enum):
@@ -145,8 +148,17 @@ class EventBus:
                 self._history.append(event)
             listeners = list(self._subscribers.get(event_type, []))
 
+        logger.debug(
+            "Publishing event '%s' to %d listener(s)",
+            event_type.value,
+            len(listeners),
+        )
         for callback in listeners:
-            callback(event)
+            try:
+                callback(event)
+            except Exception:
+                logger.exception("Event listener failed for '%s'", event_type.value)
+                raise
 
         return event
 

@@ -25,6 +25,7 @@ from openjarvis.server.models import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _to_messages(chat_messages) -> list[Message]:
@@ -49,6 +50,12 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     engine = request.app.state.engine
     agent = getattr(request.app.state, "agent", None)
     model = request_body.model
+    logger.info(
+        "Chat completion requested: model=%s stream=%s has_tools=%s",
+        model,
+        request_body.stream,
+        bool(request_body.tools),
+    )
 
     # Inject memory context into messages before dispatching
     config = getattr(request.app.state, "config", None)
@@ -144,11 +151,14 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
         # so it can't stream tokens in real-time).  For plain chat, stream
         # directly from the engine for true token-by-token output.
         if agent is not None and bus is not None and request_body.tools:
+            logger.debug("Routing stream request through agent stream bridge")
             return await _handle_agent_stream(agent, bus, model, request_body)
+        logger.debug("Routing stream request through direct engine streaming")
         return await _handle_stream(engine, model, request_body, complexity_info)
 
     # Non-streaming: use agent if available, otherwise direct engine call
     if agent is not None:
+        logger.debug("Routing non-stream request through agent")
         return _handle_agent(agent, model, request_body, complexity_info)
 
     bus = getattr(request.app.state, "bus", None)
@@ -169,6 +179,7 @@ def _handle_direct(
     complexity_info=None,
 ) -> ChatCompletionResponse:
     """Direct engine call without agent."""
+    logger.debug("Running direct engine generation (model=%s)", model)
     messages = _to_messages(req.messages)
     kwargs: dict[str, Any] = {}
     if req.tools:
@@ -195,6 +206,11 @@ def _handle_direct(
         )
     content = result.get("content", "")
     usage = result.get("usage", {})
+    logger.info(
+        "Direct engine generation completed (model=%s total_tokens=%s)",
+        model,
+        usage.get("total_tokens", 0),
+    )
 
     choice_msg = ChoiceMessage(role="assistant", content=content)
     # Include tool calls if present
@@ -253,6 +269,7 @@ def _handle_agent(
     if model:
         agent._model = model
     try:
+        logger.debug("Running agent completion (model=%s)", model)
         result = agent.run(input_text, context=ctx)
     finally:
         agent._model = original_model
@@ -317,6 +334,11 @@ async def _handle_stream(
     # Route directly to the right backend — bypasses engine routing entirely
     # so broken MultiEngine state can never misdirect requests.
     use_cloud = is_cloud_model(model)
+    logger.debug(
+        "Starting streaming generation (model=%s backend=%s)",
+        model,
+        "cloud" if use_cloud else "local",
+    )
 
     async def generate():
         # Send role chunk first
@@ -458,6 +480,7 @@ async def list_models(request: Request) -> ModelListResponse:
     model_ids = [m for m in all_ids if not is_cloud_model(m)]
     if not model_ids:
         model_ids = await list_local_models()
+    logger.debug("Listed %d local model(s)", len(model_ids))
 
     return ModelListResponse(
         data=[ModelObject(id=mid) for mid in model_ids],
@@ -469,6 +492,7 @@ async def pull_model(request: Request):
     """Pull / download a model from the Ollama registry."""
     body = await request.json()
     model_name = body.get("model", "").strip()
+    logger.info("Model pull requested: %s", model_name or "<missing>")
     if not model_name:
         raise HTTPException(status_code=400, detail="'model' field is required")
 
@@ -501,12 +525,14 @@ async def pull_model(request: Request):
     finally:
         client.close()
 
+    logger.info("Model pull completed: %s", model_name)
     return {"status": "ok", "model": model_name}
 
 
 @router.delete("/v1/models/{model_name:path}")
 async def delete_model(model_name: str, request: Request):
     """Delete a model from Ollama."""
+    logger.info("Model delete requested: %s", model_name)
     engine = request.app.state.engine
     engine_name = getattr(request.app.state, "engine_name", "")
     if engine_name != "ollama" and getattr(engine, "engine_id", "") != "ollama":
@@ -533,6 +559,7 @@ async def delete_model(model_name: str, request: Request):
     finally:
         client.close()
 
+    logger.info("Model delete completed: %s", model_name)
     return {"status": "deleted", "model": model_name}
 
 
@@ -567,6 +594,7 @@ async def reload_cloud_engine(request: Request):
                 "message": "No cloud models available (check API keys)",
             }
     except Exception as exc:
+        logger.warning("Cloud engine reload failed: %s", exc)
         return {"status": "error", "message": str(exc)}
 
     # Locate the innermost engine, working through InstrumentedEngine layers.
@@ -590,6 +618,7 @@ async def reload_cloud_engine(request: Request):
             request.app.state.engine = new_multi
         request.app.state.engine_name = "multi"
 
+    logger.info("Cloud engine reloaded successfully")
     return {"status": "ok", "message": "Cloud engine reloaded"}
 
 
@@ -729,6 +758,11 @@ async def channel_send(request: Request):
     ok = bridge.send(channel_name, content, conversation_id=conversation_id)
     if not ok:
         raise HTTPException(status_code=502, detail="Failed to send message")
+    logger.info(
+        "Channel message sent (channel=%s conversation_id=%s)",
+        channel_name,
+        conversation_id or "<none>",
+    )
     return {"status": "sent", "channel": channel_name}
 
 
@@ -753,6 +787,11 @@ async def security_scan():
 
     scanner = PrivacyScanner()
     results = scanner.run_all()
+    logger.info(
+        "Security scan completed (warnings=%s failures=%s)",
+        any(r.status == "warn" for r in results),
+        any(r.status == "fail" for r in results),
+    )
     return {
         "has_warnings": any(r.status == "warn" for r in results),
         "has_failures": any(r.status == "fail" for r in results),

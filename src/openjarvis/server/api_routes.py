@@ -569,6 +569,7 @@ async def websocket_chat_stream(websocket: WebSocket):
         {"type": "error", "detail": "..."}    -- on failure
     """
     await websocket.accept()
+    logger.info("WebSocket chat stream connected")
     try:
         while True:
             raw = await websocket.receive_text()
@@ -600,6 +601,11 @@ async def websocket_chat_stream(websocket: WebSocket):
                 continue
 
             messages = [{"role": "user", "content": message}]
+            logger.debug(
+                "WebSocket chat message received (model=%s length=%d)",
+                model,
+                len(message),
+            )
 
             try:
                 # Prefer streaming if the engine supports it
@@ -644,6 +650,11 @@ async def websocket_chat_stream(websocket: WebSocket):
                     await websocket.send_json(
                         {"type": "done", "content": full_content},
                     )
+                    logger.info(
+                        "WebSocket chat response completed (model=%s length=%d)",
+                        model,
+                        len(full_content),
+                    )
                 else:
                     # No stream method — single-shot generate
                     result = engine.generate(messages, model=model)
@@ -661,14 +672,20 @@ async def websocket_chat_stream(websocket: WebSocket):
                     await websocket.send_json(
                         {"type": "done", "content": content},
                     )
+                    logger.info(
+                        "WebSocket chat response completed (model=%s length=%d)",
+                        model,
+                        len(content),
+                    )
             except WebSocketDisconnect:
                 raise
             except Exception as exc:
+                logger.error("WebSocket chat processing failed: %s", exc, exc_info=True)
                 await websocket.send_json(
                     {"type": "error", "detail": str(exc)},
                 )
     except WebSocketDisconnect:
-        pass  # Client disconnected — nothing to clean up
+        logger.info("WebSocket chat stream disconnected")
 
 
 # ---- Learning routes ----
