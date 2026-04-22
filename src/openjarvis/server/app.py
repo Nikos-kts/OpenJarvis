@@ -197,59 +197,6 @@ def create_app(
         allow_headers=["*"],
     )
 
-    @app.middleware("http")
-    async def _log_http_requests(request: Request, call_next):
-        method = request.method
-        path = request.url.path
-        started_at = time.perf_counter()
-        logger.debug("HTTP request started: %s %s", method, path)
-        try:
-            response = await call_next(request)
-        except Exception:
-            elapsed_ms = (time.perf_counter() - started_at) * 1000
-            logger.exception(
-                "HTTP request failed: %s %s (%.1fms)",
-                method,
-                path,
-                elapsed_ms,
-            )
-            raise
-
-        elapsed_ms = (time.perf_counter() - started_at) * 1000
-        status = response.status_code
-        if status >= 500:
-            logger.error(
-                "HTTP request completed with server error: %s %s -> %s (%.1fms)",
-                method,
-                path,
-                status,
-                elapsed_ms,
-            )
-        elif status >= 400:
-            logger.warning(
-                "HTTP request completed with client error: %s %s -> %s (%.1fms)",
-                method,
-                path,
-                status,
-                elapsed_ms,
-            )
-        elif method in {"POST", "PUT", "PATCH", "DELETE"}:
-            logger.info(
-                "HTTP action completed: %s %s -> %s (%.1fms)",
-                method,
-                path,
-                status,
-                elapsed_ms,
-            )
-        else:
-            logger.debug(
-                "HTTP request completed: %s %s -> %s (%.1fms)",
-                method,
-                path,
-                status,
-                elapsed_ms,
-            )
-        return response
 
     # Store dependencies in app state
     app.state.engine = engine
