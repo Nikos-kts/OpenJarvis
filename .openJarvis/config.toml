@@ -1,0 +1,19 @@
+# OpenJarvis configuration
+# Hardware: Apple M3 Pro (11 cores, 18.0 GB RAM)
+# GPU: Apple M3 Pro (18.0 GB unified memory)
+# Full reference config: jarvis init --full
+
+[engine]
+default = "ollama"
+
+[engine.ollama]
+# host = "http://localhost:11434"  # set to remote URL if engine runs elsewhere
+
+[intelligence]
+default_model = "qwen3.5:9b"
+
+[agent]
+default_agent = "simple"
+
+[tools]
+enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]
