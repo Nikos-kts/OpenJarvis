@@ -406,7 +406,7 @@ def serve(
             import tomllib
 
             _cfg_path = str(
-                __import__("pathlib").Path.home() / ".openjarvis" / "config.toml"
+                __import__("pathlib").Path("openJarvis") / "config.toml"
             )
             with open(_cfg_path, "rb") as _f:
                 _raw = tomllib.load(_f)

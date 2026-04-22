@@ -38,7 +38,7 @@ if not _BRIDGE_SRC.exists():
     )
 
 # Default runtime directory (npm install + auth state).
-_DEFAULT_RUNTIME_DIR = Path.home() / ".openjarvis" / "whatsapp_baileys_bridge"
+_DEFAULT_RUNTIME_DIR = Path("openJarvis") / "whatsapp_baileys_bridge"
 
 
 @ChannelRegistry.register("whatsapp_baileys")

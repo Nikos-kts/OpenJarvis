@@ -27,7 +27,7 @@ _cache: Optional[Dict[str, str]] = None
 
 def _load_overrides() -> Dict[str, str]:
     """Parse descriptions.toml and return {tool_name: description}."""
-    home = Path(os.environ.get("OPENJARVIS_HOME", "~/.openjarvis")).expanduser()
+    home = Path(os.environ.get("OPENJARVIS_HOME", "openJarvis"))
     desc_path = home / "tools" / "descriptions.toml"
     if not desc_path.exists():
         return {}

@@ -68,7 +68,7 @@ def setup_logging(
         if log_file is None:
             from openjarvis.security.file_utils import secure_mkdir
 
-            log_dir = Path.home() / ".openjarvis"
+            log_dir = Path("openJarvis")
             secure_mkdir(log_dir)
             log_file = log_dir / "cli.log"
         file_handler = RotatingFileHandler(

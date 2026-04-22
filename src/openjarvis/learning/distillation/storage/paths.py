@@ -46,7 +46,7 @@ def _resolve_openjarvis_home() -> Path:
     env = os.environ.get("OPENJARVIS_HOME")
     if env:
         return Path(env).expanduser().resolve()
-    return (Path.home() / ".openjarvis").resolve()
+    return Path("openJarvis").resolve()
 
 
 def resolve_distillation_root() -> Path:

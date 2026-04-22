@@ -21,7 +21,7 @@ def _load_persona(persona_name: str) -> str:
     """Load a persona prompt file by name."""
     search_paths = [
         Path("configs/openjarvis/prompts/personas") / f"{persona_name}.md",
-        Path.home() / ".openjarvis" / "prompts" / "personas" / f"{persona_name}.md",
+        Path("openJarvis") / "prompts" / "personas" / f"{persona_name}.md",
     ]
     for p in search_paths:
         if p.exists():

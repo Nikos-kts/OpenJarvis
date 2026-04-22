@@ -547,7 +547,7 @@ async def reload_cloud_engine(request: Request):
     from pathlib import Path
 
     # Re-read ~/.openjarvis/cloud-keys.env and update the running process env.
-    keys_path = Path.home() / ".openjarvis" / "cloud-keys.env"
+    keys_path = Path("openJarvis") / "cloud-keys.env"
     if keys_path.exists():
         for raw_line in keys_path.read_text().splitlines():
             line = raw_line.strip()
