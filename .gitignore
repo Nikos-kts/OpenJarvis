@@ -98,3 +98,8 @@ src/openjarvis/channels/whatsapp_baileys_bridge/node_modules/
 # Second Repos
 Inline/
 scratch/
+
+# MCP Related
+
+# Playwright
+.playwright-mcp
