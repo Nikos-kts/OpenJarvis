@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from openjarvis.core.config import JarvisConfig
     from openjarvis.speech._stubs import SpeechBackend
+
+logger = logging.getLogger(__name__)
 
 # Priority order: local first, then cloud
 DISCOVERY_ORDER = [
@@ -25,6 +28,7 @@ def _create_backend(
     from openjarvis.core.registry import SpeechRegistry
 
     if not SpeechRegistry.contains(key):
+        logger.debug("Speech backend not registered: %s", key)
         return None
 
     try:
@@ -39,16 +43,25 @@ def _create_backend(
         elif key == "openai":
             api_key = os.environ.get("OPENAI_API_KEY", "")
             if not api_key:
+                logger.debug(
+                    "Skipping speech backend '%s': missing OPENAI_API_KEY",
+                    key,
+                )
                 return None
             return backend_cls(api_key=api_key)
         elif key == "deepgram":
             api_key = os.environ.get("DEEPGRAM_API_KEY", "")
             if not api_key:
+                logger.debug(
+                    "Skipping speech backend '%s': missing DEEPGRAM_API_KEY",
+                    key,
+                )
                 return None
             return backend_cls(api_key=api_key)
         else:
             return backend_cls()
     except Exception:
+        logger.warning("Failed creating speech backend: %s", key, exc_info=True)
         return None
 
 
@@ -64,12 +77,17 @@ def get_speech_backend(config: "JarvisConfig") -> Optional["SpeechBackend"]:
     backend_key = config.speech.backend
 
     if backend_key != "auto":
-        return _create_backend(backend_key, config)
+        backend = _create_backend(backend_key, config)
+        if backend is not None:
+            logger.debug("Selected configured speech backend: %s", backend_key)
+        return backend
 
     # Auto-discovery: try each in priority order
     for key in DISCOVERY_ORDER:
         backend = _create_backend(key, config)
         if backend is not None:
+            logger.debug("Auto-selected speech backend: %s", key)
             return backend
 
+    logger.debug("No speech backend available after auto-discovery")
     return None
