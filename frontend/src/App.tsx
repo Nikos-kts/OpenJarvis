@@ -1,19 +1,20 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Routes, Route } from 'react-router';
-import { Layout } from './components/Layout';
-import { ChatPage } from './pages/ChatPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { GetStartedPage } from './pages/GetStartedPage';
-import { AgentsPage } from './pages/AgentsPage';
-import { DataSourcesPage } from './pages/DataSourcesPage';
-import { LogsPage } from './pages/LogsPage';
+import { useCallback, useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router';
 import { CommandPalette } from './components/CommandPalette';
+import { Layout } from './components/Layout';
+import { OptInModal } from './components/OptInModal';
 import { SetupScreen } from './components/SetupScreen';
 import { Toaster } from './components/ui/sonner';
+import { fetchModels, fetchSavings, fetchServerInfo, isTauri, submitSavings } from './lib/api';
 import { useAppStore } from './lib/store';
-import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
-import { OptInModal } from './components/OptInModal';
+import { AgentsPage } from './pages/AgentsPage';
+import { ChatPage } from './pages/ChatPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { DataSourcesPage } from './pages/DataSourcesPage';
+import { GetStartedPage } from './pages/GetStartedPage';
+import { LogsPage } from './pages/LogsPage';
+import { SettingsPage } from './pages/SettingsPage';
+import type { ModelInfo } from './types';
 
 export default function App() {
   const [setupDone, setSetupDone] = useState(!isTauri());
@@ -54,20 +55,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, [importOverlay]);
 
-  // Fetch models on mount
+  // Fetch models and server info on mount; prefer the server's configured
+  // model as the initial selection over the arbitrary first entry from Ollama.
   useEffect(() => {
-    fetchModels()
-      .then((m) => {
-        setModels(m);
-        if (!selectedModel && m.length > 0) setSelectedModel(m[0].id);
-      })
-      .catch(() => setModels([]))
-      .finally(() => setModelsLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch server info
-  useEffect(() => {
-    fetchServerInfo().then(setServerInfo).catch(() => {});
+    Promise.all([
+      fetchModels().catch((): ModelInfo[] => []),
+      fetchServerInfo().catch(() => null),
+    ]).then(([m, info]) => {
+      setModels(m);
+      if (info) setServerInfo(info);
+      if (!selectedModel) {
+        const preferred = info?.model || (m.length > 0 ? m[0].id : '');
+        if (preferred) setSelectedModel(preferred);
+      }
+    }).finally(() => setModelsLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll savings and optionally share to Supabase
@@ -102,7 +103,7 @@ export default function App() {
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     refresh();
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
