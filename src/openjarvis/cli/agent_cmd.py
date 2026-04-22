@@ -19,7 +19,7 @@ def _get_manager():
 
     config = load_config()
     db_path = config.agent_manager.db_path or str(
-        Path("~/.openjarvis/agents.db").expanduser()
+        Path(".openJarvis/db/agents.db")
     )
     return AgentManager(db_path=db_path)
 

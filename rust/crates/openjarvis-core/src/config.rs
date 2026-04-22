@@ -475,7 +475,7 @@ pub struct StorageConfig {
 }
 
 fn default_sqlite() -> String { "sqlite".into() }
-fn default_memory_db_path() -> String { format!("{}/memory.db", default_config_dir_str()) }
+fn default_memory_db_path() -> String { format!("{}/db/memory.db", default_config_dir_str()) }
 fn default_context_top_k() -> i64 { 5 }
 fn default_context_min_score() -> f64 { 0.1 }
 fn default_context_max_tokens() -> i64 { 2048 }
@@ -648,7 +648,7 @@ pub struct TelemetryConfig {
     pub steady_state_threshold: f64,
 }
 
-fn default_telemetry_db() -> String { format!("{}/telemetry.db", default_config_dir_str()) }
+fn default_telemetry_db() -> String { format!("{}/db/telemetry.db", default_config_dir_str()) }
 fn default_gpu_poll() -> i64 { 50 }
 fn default_ss_window() -> i64 { 5 }
 fn default_ss_threshold() -> f64 { 0.05 }
@@ -676,7 +676,7 @@ pub struct TracesConfig {
     pub db_path: String,
 }
 
-fn default_traces_db() -> String { format!("{}/traces.db", default_config_dir_str()) }
+fn default_traces_db() -> String { format!("{}/db/traces.db", default_config_dir_str()) }
 
 impl Default for TracesConfig {
     fn default() -> Self {
@@ -727,7 +727,7 @@ pub struct SecurityConfig {
 }
 
 fn default_warn() -> String { "warn".into() }
-fn default_audit_log() -> String { format!("{}/audit.db", default_config_dir_str()) }
+fn default_audit_log() -> String { format!("{}/db/audit.db", default_config_dir_str()) }
 fn default_rpm() -> i64 { 60 }
 fn default_burst() -> i64 { 10 }
 
@@ -831,7 +831,7 @@ pub struct SessionConfig {
 
 fn default_max_age() -> f64 { 24.0 }
 fn default_consolidation() -> i64 { 100 }
-fn default_sessions_db() -> String { format!("{}/sessions.db", default_config_dir_str()) }
+fn default_sessions_db() -> String { format!("{}/db/sessions.db", default_config_dir_str()) }
 
 impl Default for SessionConfig {
     fn default() -> Self {

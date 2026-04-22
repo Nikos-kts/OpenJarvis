@@ -32,7 +32,7 @@ class AuditLogger:
 
     def __init__(
         self,
-        db_path: Union[str, Path] = DEFAULT_CONFIG_DIR / "audit.db",
+        db_path: Union[str, Path] = DEFAULT_CONFIG_DIR / "db" / "audit.db",
         bus: Optional[EventBus] = None,
     ) -> None:
         self._db_path = Path(db_path)

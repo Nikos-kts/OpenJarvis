@@ -409,7 +409,7 @@ def deep_research_setup(obsidian_vault: Optional[str], skip_chat: bool) -> None:
     if not click.confirm("Ingest these sources?", default=True):
         sys.exit(0)
 
-    db_path = DEFAULT_CONFIG_DIR / "knowledge.db"
+    db_path = DEFAULT_CONFIG_DIR / "db" / "knowledge.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = KnowledgeStore(str(db_path))
 

@@ -119,7 +119,7 @@ class KnowledgeStore(MemoryBackend):
         if not db_path:
             from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
-            db_path = DEFAULT_CONFIG_DIR / "knowledge.db"
+            db_path = DEFAULT_CONFIG_DIR / "db" / "knowledge.db"
 
         self._db_path = str(db_path)
         # Ensure the parent directory exists (skip for :memory:)

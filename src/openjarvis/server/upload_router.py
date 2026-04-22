@@ -103,7 +103,7 @@ def _extract_text_from_docx(data: bytes) -> str:
 
 def _get_store() -> KnowledgeStore:
     """Return a KnowledgeStore pointing at the default knowledge DB."""
-    db_path = DEFAULT_CONFIG_DIR / "knowledge.db"
+    db_path = DEFAULT_CONFIG_DIR / "db" / "knowledge.db"
     return KnowledgeStore(db_path=db_path)
 
 

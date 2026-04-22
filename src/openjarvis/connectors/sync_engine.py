@@ -58,7 +58,7 @@ class SyncEngine:
         self._pipeline = pipeline
 
         if not state_db:
-            db_path = DEFAULT_CONFIG_DIR / "sync_state.db"
+            db_path = DEFAULT_CONFIG_DIR / "db" / "sync_state.db"
         else:
             db_path = Path(state_db)
 

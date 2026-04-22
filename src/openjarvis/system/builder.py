@@ -221,7 +221,7 @@ class SystemBuilder:
                 from openjarvis.agents.manager import AgentManager
 
                 am_db = config.agent_manager.db_path or str(
-                    Path("~/.openjarvis/agents.db").expanduser()
+                    Path(".openJarvis/db/agents.db")
                 )
                 agent_manager = AgentManager(db_path=am_db)
             except Exception as exc:
@@ -484,7 +484,7 @@ class SystemBuilder:
             if not config.scheduler.db_path:
                 from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
-                db_path = str(DEFAULT_CONFIG_DIR / "scheduler.db")
+                db_path = str(DEFAULT_CONFIG_DIR / "db" / "scheduler.db")
 
             store = SchedulerStore(db_path=db_path)
 

@@ -762,7 +762,7 @@ class StorageConfig:
     """Storage (memory) backend settings."""
 
     default_backend: str = "sqlite"
-    db_path: str = str(DEFAULT_CONFIG_DIR / "memory.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "memory.db")
     context_top_k: int = 5
     context_min_score: float = 0.1
     context_max_tokens: int = 2048
@@ -855,7 +855,7 @@ class TelemetryConfig:
     """Telemetry persistence settings."""
 
     enabled: bool = True
-    db_path: str = str(DEFAULT_CONFIG_DIR / "telemetry.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "telemetry.db")
     gpu_metrics: bool = False
     gpu_poll_interval_ms: int = 50
     energy_vendor: str = ""  # auto-detect or force "nvidia"/"amd"/"apple"/"cpu_rapl"
@@ -869,7 +869,7 @@ class TracesConfig:
     """Trace system settings."""
 
     enabled: bool = True
-    db_path: str = str(DEFAULT_CONFIG_DIR / "traces.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "traces.db")
 
 
 @dataclass(slots=True)
@@ -1058,7 +1058,7 @@ class SecurityConfig:
     mode: str = "redact"  # "redact" | "warn" | "block"
     secret_scanner: bool = True
     pii_scanner: bool = True
-    audit_log_path: str = str(DEFAULT_CONFIG_DIR / "audit.db")
+    audit_log_path: str = str(DEFAULT_CONFIG_DIR / "db" / "audit.db")
     enforce_tool_confirmation: bool = True
     merkle_audit: bool = True
     signing_key_path: str = ""
@@ -1171,7 +1171,7 @@ class SchedulerConfig:
 
     enabled: bool = False
     poll_interval: int = 60
-    db_path: str = ""  # Defaults to ~/.openjarvis/scheduler.db
+    db_path: str = ""  # Defaults to .openJarvis/db/scheduler.db
 
 
 @dataclass(slots=True)
@@ -1190,7 +1190,7 @@ class SessionConfig:
     enabled: bool = False
     max_age_hours: float = 24.0
     consolidation_threshold: int = 100
-    db_path: str = str(DEFAULT_CONFIG_DIR / "sessions.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "sessions.db")
 
 
 @dataclass(slots=True)
@@ -1231,7 +1231,7 @@ class OptimizeConfig:
     benchmark: str = ""
     max_samples: int = 50
     judge_model: str = "gpt-5-mini-2025-08-07"
-    db_path: str = str(DEFAULT_CONFIG_DIR / "optimize.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "optimize.db")
 
 
 @dataclass(slots=True)
@@ -1239,7 +1239,7 @@ class AgentManagerConfig:
     """Persistent agent manager settings."""
 
     enabled: bool = True
-    db_path: str = str(DEFAULT_CONFIG_DIR / "agents.db")
+    db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "agents.db")
 
 
 @dataclass(slots=True)
@@ -1848,7 +1848,7 @@ ssrf_protection = true
 # [scheduler]
 # enabled = false
 # poll_interval = 60
-# db_path = ""                # Defaults to ~/.openjarvis/scheduler.db
+# db_path = ""                # Defaults to .openJarvis/db/scheduler.db
 
 # [channel.whatsapp_baileys]
 # auth_dir = ""               # Defaults to ~/.openjarvis/whatsapp_auth

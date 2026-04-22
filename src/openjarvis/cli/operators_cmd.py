@@ -189,7 +189,7 @@ def logs(operator_id: str, lines: int) -> None:
         if not db_path:
             from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
-            db_path = str(DEFAULT_CONFIG_DIR / "scheduler.db")
+            db_path = str(DEFAULT_CONFIG_DIR / "db" / "scheduler.db")
 
         store = SchedulerStore(db_path=db_path)
         task_id = f"operator:{operator_id}"

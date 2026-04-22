@@ -412,7 +412,7 @@ def _build_deep_research_tools(
     if not knowledge_db_path:
         from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
-        knowledge_db_path = str(DEFAULT_CONFIG_DIR / "knowledge.db")
+        knowledge_db_path = str(DEFAULT_CONFIG_DIR / "db" / "knowledge.db")
 
     if not Path(knowledge_db_path).exists():
         return []
@@ -1869,7 +1869,7 @@ def create_agent_manager_router(
             from openjarvis.traces.store import TraceStore
 
             config = load_config()
-            store = TraceStore(config.traces.db_path or "~/.openjarvis/traces.db")
+            store = TraceStore(config.traces.db_path or ".openJarvis/db/traces.db")
             traces = store.list_traces(agent=agent_id, limit=limit)
             return {
                 "traces": [
@@ -1894,7 +1894,7 @@ def create_agent_manager_router(
             from openjarvis.traces.store import TraceStore
 
             config = load_config()
-            store = TraceStore(config.traces.db_path or "~/.openjarvis/traces.db")
+            store = TraceStore(config.traces.db_path or ".openJarvis/db/traces.db")
             trace = store.get(trace_id)
             if trace is None:
                 raise HTTPException(status_code=404, detail="Trace not found")

@@ -604,7 +604,7 @@ async def savings(request: Request):
     from openjarvis.server.savings import compute_savings, savings_to_dict
     from openjarvis.telemetry.aggregator import TelemetryAggregator
 
-    db_path = DEFAULT_CONFIG_DIR / "telemetry.db"
+    db_path = DEFAULT_CONFIG_DIR / "db" / "telemetry.db"
     if not db_path.exists():
         empty = compute_savings(0, 0, 0)
         return savings_to_dict(empty)
@@ -656,7 +656,7 @@ async def reset_telemetry():
     from openjarvis.core.config import DEFAULT_CONFIG_DIR
     from openjarvis.telemetry.aggregator import TelemetryAggregator
 
-    db_path = DEFAULT_CONFIG_DIR / "telemetry.db"
+    db_path = DEFAULT_CONFIG_DIR / "db" / "telemetry.db"
     if not db_path.exists():
         return {"status": "ok", "records_cleared": 0}
 

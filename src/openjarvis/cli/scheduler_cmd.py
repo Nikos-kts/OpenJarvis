@@ -18,7 +18,7 @@ def _get_store() -> "SchedulerStore":  # noqa: F821
 
     config = load_config()
     db_path = getattr(getattr(config, "scheduler", None), "db_path", None) or str(
-        DEFAULT_CONFIG_DIR / "scheduler.db"
+        DEFAULT_CONFIG_DIR / "db" / "scheduler.db"
     )
     return SchedulerStore(db_path)
 

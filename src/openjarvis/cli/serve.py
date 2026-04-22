@@ -331,7 +331,7 @@ def serve(
             from openjarvis.agents.manager import AgentManager
 
             am_db = config.agent_manager.db_path or str(
-                Path("~/.openjarvis/agents.db").expanduser()
+                Path(".openJarvis/db/agents.db")
             )
             agent_manager = AgentManager(db_path=am_db)
         except Exception as exc:
