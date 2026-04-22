@@ -97,6 +97,7 @@ class LearningOrchestrator:
         result: Dict[str, Any] = {
             "timestamp": time.time(),
         }
+        logger.debug("Learning cycle started (agent_id=%s)", agent_id or "<all>")
 
         # 0. Skill optimization (Plan 2A C2) — runs INDEPENDENTLY of the
         # routing/agent SFT pipeline.  Skills are tagged via trace metadata
@@ -138,6 +139,7 @@ class LearningOrchestrator:
         if total_data == 0:
             result["status"] = "skipped"
             result["reason"] = "no training data available"
+            logger.debug("Learning cycle skipped: no training data")
             return result
 
         # 3. Run baseline eval
@@ -177,6 +179,11 @@ class LearningOrchestrator:
             if improvement >= self._min_improvement:
                 result["accepted"] = True
                 result["status"] = "completed"
+                logger.debug(
+                    "Learning cycle accepted: improvement=%.4f threshold=%.4f",
+                    improvement,
+                    self._min_improvement,
+                )
             else:
                 result["accepted"] = False
                 result["status"] = "rejected"
@@ -184,11 +191,18 @@ class LearningOrchestrator:
                     f"eval improvement {improvement:.4f} below "
                     f"threshold {self._min_improvement}"
                 )
+                logger.warning(
+                    "Learning cycle rejected: improvement=%.4f threshold=%.4f",
+                    improvement,
+                    self._min_improvement,
+                )
         else:
             # No eval gate — always accept
             result["accepted"] = True
             result["status"] = "completed"
+            logger.debug("Learning cycle completed without eval gate")
 
+        logger.debug("Learning cycle finished with status=%s", result.get("status", ""))
         return result
 
     # ------------------------------------------------------------------
