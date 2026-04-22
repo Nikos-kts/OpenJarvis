@@ -157,7 +157,12 @@ class EventBus:
             try:
                 callback(event)
             except Exception:
-                logger.exception("Event listener failed for '%s'", event_type.value)
+                callback_name = getattr(callback, "__name__", repr(callback))
+                logger.exception(
+                    "Event listener failed for '%s' (listener=%s)",
+                    event_type.value,
+                    callback_name,
+                )
                 raise
 
         return event
