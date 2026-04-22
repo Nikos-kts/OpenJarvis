@@ -229,6 +229,30 @@ User (CLI / Browser / Desktop / Channel)
 
 The feedback loop is the key differentiator: **agents produce traces → traces inform learning → learning improves routing → better routing improves agents**.
 
+┌─────────────────────────────────┐
+│   React frontend (browser/Tauri) │  TypeScript/TSX
+│   Chat, Dashboard, Settings UI  │
+└──────────────┬──────────────────┘
+               │ HTTP / SSE (REST API)
+               │ Tauri invoke() when desktop
+┌──────────────▼──────────────────┐
+│   Python FastAPI server          │  Python
+│   CLI, Agents, Tools, Config     │
+│   Speech, Connectors, Training   │
+└──────────────┬──────────────────┘
+               │ import openjarvis_rust (PyO3)
+┌──────────────▼──────────────────┐
+│   Rust native extension          │  Rust (rust/)
+│   Security, Memory, Telemetry    │
+│   Agent runtime, ML policies     │
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│   Tauri desktop shell            │  Rust (desktop/src-tauri/)
+│   Native window, overlay UI      │
+│   Bridges frontend ↔ Python server│
+└─────────────────────────────────┘
+
 ---
 
 ## Quick Start
@@ -330,3 +354,20 @@ jarvis init --preset chat-simple           # Lightweight conversation
 │ web_search              │ Search the web for current information. Returns   │ search          │
 │                         │ relevant sea                                      │                 │
 └─────────────────────────┴───────────────────────────────────────────────────┴─────────────────┘
+
+uv run jarvis ask "What is the capital of France?"
+jarvis ask "query"
+    │
+    ├─ load_config()
+    ├─ score_complexity(query)         ← auto-sizes max_tokens
+    ├─ get_engine()                    ← finds Ollama/vLLM/etc
+    ├─ setup_security()                ← guardrails wrapper
+    ├─ InstrumentedEngine()            ← telemetry wrapper
+    │
+    ├─ [--agent flag?]
+    │      YES → OrchestratorAgent.run()
+    │                └─ tool-calling loop → engine.generate() × N
+    │      NO  → engine.generate() × 1  (direct)
+    │
+    ├─ print(result.content)
+    └─ save telemetry → .openJarvis/db/telemetry.db
