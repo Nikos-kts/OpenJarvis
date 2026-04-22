@@ -1,19 +1,508 @@
 # OpenJarvis configuration
-# Hardware: Apple M3 Pro (11 cores, 18.0 GB RAM)
-# GPU: Apple M3 Pro (18.0 GB unified memory)
-# Full reference config: jarvis init --full
+# Hardware: Apple M3 Pro (11 cores, 18.0 GB RAM) — GPU: Apple M3 Pro (18.0 GB unified)
+#
+# Every key below is shown with its built-in default. Uncomment a line to
+# override it. Lines prefixed with `# ` are the defaults; lines without a
+# leading `#` are active overrides.
+#
+# You can also edit everything from the Settings page in the OpenJarvis UI —
+# writes there go through the same validator and preserve these comments.
 
+
+# =============================================================================
+# Engine — which local inference runtime(s) to talk to
+# =============================================================================
 [engine]
-default = "ollama"
+default = "ollama"                     # ollama | vllm | sglang | llamacpp | mlx | lmstudio | exo | nexa | uzu | apple_fm | gemmacpp | lemonade
 
 [engine.ollama]
-# host = "http://localhost:11434"  # set to remote URL if engine runs elsewhere
+# host = "http://localhost:11434"      # set to remote URL if engine runs elsewhere
 
+# [engine.vllm]
+# host = "http://localhost:8000"
+
+# [engine.sglang]
+# host = "http://localhost:30000"
+
+# [engine.llamacpp]
+# host = "http://localhost:8080"
+# binary_path = ""                     # path to a local llama.cpp binary
+
+# [engine.mlx]
+# host = "http://localhost:8080"
+
+# [engine.lmstudio]
+# host = "http://localhost:1234"
+
+# [engine.exo]
+# host = "http://localhost:52415"
+
+# [engine.nexa]
+# host = "http://localhost:18181"
+# device = ""                          # cpu | gpu | npu
+
+# [engine.uzu]
+# host = "http://localhost:8080"
+
+# [engine.apple_fm]
+# host = "http://localhost:8079"
+
+# [engine.gemmacpp]
+# host = "http://localhost:8080"
+# binary_path = ""
+
+# [engine.lemonade]
+# host = "http://localhost:8000"
+
+
+# =============================================================================
+# Intelligence — model identity and generation defaults
+# =============================================================================
 [intelligence]
-default_model = "qwen2.5:7b"
+default_model = "qwen2.5:7b"           # recommended for this hardware
+# fallback_model = ""                  # used when the default is unreachable
+# model_path = ""                      # local weights (HF repo, GGUF file, …)
+# checkpoint_path = ""                 # checkpoint / adapter path
+# quantization = "none"                # none | fp8 | int8 | int4 | gguf_q4 | gguf_q8
+# preferred_engine = ""                # force a specific engine for this model
+# provider = ""                        # local | openai | anthropic | google
+# temperature = 0.7
+# max_tokens = 1024
+# top_p = 0.9
+# top_k = 40
+# repetition_penalty = 1.0
+# stop_sequences = ""                  # comma-separated stop strings
 
+
+# =============================================================================
+# Agent — harness, tools, system prompt
+# =============================================================================
 [agent]
-default_agent = "simple"
+default_agent = "simple"               # built-in: simple | orchestrator | react | plan_execute …
+# max_turns = 10
+# tools = ""                           # comma-separated tool names (per-agent override)
+# objective = ""                       # concise purpose string (routing + docs)
+# system_prompt = ""                   # inline system prompt (takes precedence)
+# system_prompt_path = ""              # or load from a .txt / .md file
+# context_from_memory = true           # inject relevant memory chunks into prompts
 
+
+# =============================================================================
+# Tools — memory backend, MCP, browser, default tool set
+# =============================================================================
 [tools]
-enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]
+enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]  # default tool set
+
+[tools.storage]
+# default_backend = "sqlite"           # sqlite | chroma | qdrant | …
+# db_path = ".openJarvis/db/memory.db"
+# context_top_k = 5
+# context_min_score = 0.1
+# context_max_tokens = 2048
+# chunk_size = 512
+# chunk_overlap = 64
+
+[tools.mcp]
+# enabled = true
+# servers = ""                         # JSON list of MCP server configs
+
+# [tools.browser]
+# headless = true
+# timeout_ms = 30000
+# viewport_width = 1280
+# viewport_height = 720
+
+
+# =============================================================================
+# Server — HTTP API
+# =============================================================================
+[server]
+# host = "127.0.0.1"                   # use "0.0.0.0" to expose on the network
+# port = 8000
+# agent = "orchestrator"               # default agent served on /v1/chat/completions
+# model = ""                           # default model (empty = intelligence.default_model)
+# workers = 1
+# cors_origins = [
+#     "http://localhost:3000",
+#     "http://localhost:5173",
+#     "http://127.0.0.1:3000",
+#     "http://127.0.0.1:5173",
+#     "tauri://localhost",
+# ]
+
+
+# =============================================================================
+# Security — guardrails, rate limiting, audit log
+# =============================================================================
+[security]
+# enabled = true
+# profile = ""                         # "" | personal | shared | server (preset overlays)
+# mode = "redact"                      # redact | warn | block
+# scan_input = true
+# scan_output = true
+# secret_scanner = true
+# pii_scanner = true
+# enforce_tool_confirmation = true
+# ssrf_protection = true
+# merkle_audit = true
+# signing_key_path = ""
+# audit_log_path = ".openJarvis/db/audit.db"
+# vault_key_path = ".openJarvis/.vault_key"
+# rate_limit_enabled = true
+# rate_limit_rpm = 60
+# rate_limit_burst = 10
+# local_engine_bypass = false          # skip scanning for calls to local engines
+# local_tool_bypass = false            # skip scanning for fully local tools
+
+# [security.capabilities]
+# enabled = false
+# policy_path = ""                     # RBAC / capability policy file
+
+
+# =============================================================================
+# Telemetry — persisted run metrics
+# =============================================================================
+[telemetry]
+enabled = false
+# db_path = ".openJarvis/db/telemetry.db"
+# gpu_metrics = false
+# gpu_poll_interval_ms = 50
+# energy_vendor = ""                   # auto | nvidia | amd | apple | cpu_rapl
+# warmup_samples = 0
+# steady_state_window = 5
+# steady_state_threshold = 0.05
+
+
+# =============================================================================
+# Traces — full request/response logs
+# =============================================================================
+# [traces]
+# enabled = true
+# db_path = ".openJarvis/db/traces.db"
+
+
+# =============================================================================
+# Channels — inbound messaging integrations
+# =============================================================================
+# [channel]
+# enabled = false
+# default_channel = ""
+# default_agent = "simple"
+
+# [channel.telegram]
+# bot_token = ""                       # or TELEGRAM_BOT_TOKEN env var
+# allowed_chat_ids = ""
+# parse_mode = "Markdown"
+
+# [channel.discord]
+# bot_token = ""                       # or DISCORD_BOT_TOKEN
+
+# [channel.slack]
+# bot_token = ""                       # or SLACK_BOT_TOKEN
+# app_token = ""
+
+# [channel.webhook]
+# url = ""
+# secret = ""
+# method = "POST"
+
+# [channel.email]
+# smtp_host = ""
+# smtp_port = 587
+# imap_host = ""
+# imap_port = 993
+# username = ""
+# password = ""
+# use_tls = true
+
+# [channel.whatsapp]
+# access_token = ""                    # or WHATSAPP_ACCESS_TOKEN
+# phone_number_id = ""
+
+# [channel.signal]
+# api_url = ""                         # signal-cli REST API
+# phone_number = ""
+
+# [channel.google_chat]
+# webhook_url = ""
+
+# [channel.irc]
+# server = ""
+# port = 6667
+# nick = ""
+# password = ""
+# use_tls = false
+
+# [channel.teams]
+# app_id = ""
+# app_password = ""
+# service_url = ""
+
+# [channel.matrix]
+# homeserver = ""
+# access_token = ""
+
+# [channel.mattermost]
+# url = ""
+# token = ""
+
+# [channel.feishu]
+# app_id = ""
+# app_secret = ""
+
+# [channel.bluebubbles]
+# url = ""
+# password = ""
+
+# [channel.whatsapp_baileys]
+# auth_dir = ""                        # defaults to .openJarvis/whatsapp_auth
+# assistant_name = "Jarvis"
+# assistant_has_own_number = false
+
+
+# =============================================================================
+# Speech — STT / voice input
+# =============================================================================
+# [speech]
+# backend = "auto"                     # auto | faster-whisper | openai | deepgram
+# model = "base"                       # tiny | base | small | medium | large-v3
+# language = ""                        # "" = auto-detect
+# device = "auto"                      # auto | cpu | cuda
+# compute_type = "float16"             # float16 | int8 | float32
+
+
+# =============================================================================
+# Sessions — cross-channel conversation memory
+# =============================================================================
+# [sessions]
+# enabled = false
+# max_age_hours = 24.0
+# consolidation_threshold = 100
+# db_path = ".openJarvis/db/sessions.db"
+
+
+# =============================================================================
+# Scheduler — cron-style jobs
+# =============================================================================
+# [scheduler]
+# enabled = false
+# poll_interval = 60
+# db_path = ""                         # defaults to .openJarvis/db/scheduler.db
+
+
+# =============================================================================
+# Workflow — multi-step graph runner
+# =============================================================================
+# [workflow]
+# enabled = false
+# max_parallel = 4
+# default_node_timeout = 300
+
+
+# =============================================================================
+# Sandbox — containerised code execution
+# =============================================================================
+# [sandbox]
+# enabled = false
+# image = "openjarvis-sandbox:latest"
+# runtime = "docker"                   # docker | podman | wasm
+# timeout = 300
+# max_concurrent = 5
+# workspace = ""
+# mount_allowlist_path = ""
+# wasm_fuel_limit = 1000000
+# wasm_memory_limit_mb = 256
+
+
+# =============================================================================
+# Agent manager — persistent, user-authored agents
+# =============================================================================
+# [agent_manager]
+# enabled = true
+# db_path = ".openJarvis/db/agents.db"
+
+
+# =============================================================================
+# Memory files — long-lived context (SOUL / MEMORY / USER)
+# =============================================================================
+# [memory_files]
+# soul_path = ".openJarvis/SOUL.md"
+# memory_path = ".openJarvis/MEMORY.md"
+# user_path = ".openJarvis/USER.md"
+# nudge_interval = 10
+
+
+# =============================================================================
+# System prompt — assembly limits
+# =============================================================================
+# [system_prompt]
+# soul_max_chars = 4000
+# memory_max_chars = 2500
+# user_max_chars = 1500
+# skill_desc_max_chars = 60
+# truncation_strategy = "head_tail"    # head_tail | head | tail
+
+
+# =============================================================================
+# Compression — context window management
+# =============================================================================
+# [compression]
+# enabled = true
+# threshold = 0.50                     # fraction of context window before compressing
+# strategy = "session_consolidation"
+
+
+# =============================================================================
+# Skills — procedural skills authored by agents
+# =============================================================================
+# [skills]
+# enabled = true
+# skills_dir = ".openJarvis/skills/"
+# active = "*"                         # "*" = all; otherwise comma-separated names
+# auto_discover = true
+# auto_sync = false
+# nudge_interval = 15
+# index_repo = "https://github.com/openjarvis/skill-index.git"
+# index_dir = ".openJarvis/skill-index/"
+# max_depth = 5
+# sandbox_dangerous = true
+# sources = []                         # list of { source = "hermes|openclaw|github", url = "…" }
+
+
+# =============================================================================
+# Digest — morning briefing
+# =============================================================================
+# [digest]
+# enabled = false
+# schedule = "0 6 * * *"               # cron expression
+# timezone = "America/Los_Angeles"
+# persona = "jarvis"
+# honorific = "sir"
+# voice_id = ""
+# voice_speed = 1.0
+# tts_backend = "cartesia"             # cartesia | elevenlabs | openai …
+# sections = ["messages", "calendar", "health", "world"]
+# optional_sections = ["github", "financial", "music", "fitness"]
+
+# [digest.messages]
+# sources = ["gmail", "slack", "google_tasks"]
+# max_items = 10
+# priority_contacts = []
+
+# [digest.calendar]
+# sources = ["gcalendar"]
+# max_items = 10
+
+# [digest.health]
+# sources = ["oura", "apple_health"]
+# max_items = 10
+
+# [digest.world]
+# sources = []
+# max_items = 10
+
+
+# =============================================================================
+# Learning — trace-driven optimisation
+# =============================================================================
+# [learning]
+# enabled = false
+# update_interval = 100
+# auto_update = false
+# training_enabled = false
+# training_schedule = ""               # cron expression, empty = manual
+# min_improvement = 0.02
+
+# [learning.routing]
+# policy = "heuristic"                 # heuristic | learned
+# min_samples = 5
+
+# [learning.intelligence]
+# policy = "none"                      # none | sft | grpo
+
+# [learning.intelligence.sft]
+# model_name = "Qwen/Qwen3-1.7B"
+# max_seq_length = 4096
+# num_epochs = 3
+# batch_size = 8
+# learning_rate = 2e-5
+# use_lora = true
+# lora_rank = 16
+# lora_alpha = 32
+# lora_dropout = 0.05
+# target_modules = "q_proj,v_proj"
+# use_4bit = false
+# checkpoint_dir = "checkpoints/sft"
+# min_pairs = 10
+# agent_filter = ""
+
+# [learning.intelligence.grpo]
+# model_name = "Qwen/Qwen3-1.7B"
+# num_epochs = 10
+# batch_size = 16
+# learning_rate = 1e-6
+# num_samples_per_prompt = 8
+# kl_coef = 0.0001
+# clip_ratio = 0.2
+# use_8bit_ref = true
+# checkpoint_dir = "checkpoints/grpo"
+# min_prompts = 10
+
+# [learning.agent]
+# policy = "none"                      # none | dspy | gepa
+
+# [learning.agent.dspy]
+# optimizer = "BootstrapFewShotWithRandomSearch"
+# max_bootstrapped_demos = 4
+# max_labeled_demos = 4
+# num_candidate_programs = 10
+# min_traces = 20
+# metric_threshold = 0.7
+
+# [learning.agent.gepa]
+# max_metric_calls = 150
+# population_size = 10
+# min_traces = 20
+
+# [learning.skills]
+# auto_optimize = false
+# optimizer = "dspy"                   # dspy | gepa
+# min_traces_per_skill = 20
+# optimization_interval_seconds = 86400
+# overlay_dir = ".openJarvis/learning/skills/"
+
+# [learning.metrics]
+# accuracy_weight = 0.6
+# latency_weight = 0.2
+# cost_weight = 0.1
+# efficiency_weight = 0.1
+
+
+# =============================================================================
+# Optimize — config auto-tuning via benchmarks
+# =============================================================================
+# [optimize]
+# max_trials = 20
+# early_stop_patience = 5
+# optimizer_model = "claude-sonnet-4-6"
+# optimizer_provider = "anthropic"
+# benchmark = ""
+# max_samples = 50
+# judge_model = "gpt-5-mini-2025-08-07"
+# db_path = ".openJarvis/db/optimize.db"
+
+
+# =============================================================================
+# A2A — Agent-to-Agent protocol
+# =============================================================================
+# [a2a]
+# enabled = false
+
+
+# =============================================================================
+# Operators — long-running operator manifests
+# =============================================================================
+# [operators]
+# enabled = false
+# manifests_dir = ".openJarvis/operators"
+# auto_activate = ""                   # comma-separated operator IDs

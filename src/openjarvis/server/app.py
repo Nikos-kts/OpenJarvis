@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from openjarvis.server.api_routes import include_all_routes
 from openjarvis.server.comparison import comparison_router
+from openjarvis.server.config_routes import router as config_router
 from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
@@ -215,6 +216,19 @@ def create_app(
     app.state.agent_scheduler = agent_scheduler
     app.state.session_start = time.time()
 
+    # Config service — single writer for .openJarvis/config.toml.
+    # All settings read/write goes through here (SettingsPage + CLI).
+    try:
+        from openjarvis.core.config_service import ConfigService
+        from openjarvis.core.reloader import SubsystemReloader
+
+        app.state.config_service = ConfigService(config=config)
+        app.state.subsystem_reloader = SubsystemReloader(app)
+    except Exception as exc:
+        logger.warning("ConfigService init failed: %s", exc)
+        app.state.config_service = None
+        app.state.subsystem_reloader = None
+
     # Wire up trace store if traces are enabled
     app.state.trace_store = None
     try:
@@ -235,6 +249,7 @@ def create_app(
     app.include_router(router)
     app.include_router(dashboard_router)
     app.include_router(comparison_router)
+    app.include_router(config_router)
     app.include_router(create_connectors_router())
     app.include_router(create_digest_router())
     app.include_router(upload_router)

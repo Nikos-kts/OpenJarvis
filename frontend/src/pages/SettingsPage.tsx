@@ -1,105 +1,457 @@
-import { useState, useEffect } from 'react';
+/**
+ * SettingsPage — the single place users configure OpenJarvis.
+ *
+ * Architecture:
+ *   - "Appearance" is local-only (theme, font size, API URL → persisted
+ *     in localStorage via `useAppStore`).
+ *   - Every other section is driven by the backend JSON schema fetched
+ *     from `/v1/config/schema` and written through `/v1/config` (PATCH).
+ *
+ * The sidebar is rendered dynamically from the schema so any new
+ * dataclass field added on the backend automatically shows up in the UI
+ * without frontend changes.
+ */
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Palette,
-  Globe,
-  Cpu,
-  Database,
+  HelpCircle,
   Info,
-  Check,
-  Sun,
-  Moon,
   Monitor,
-  Download,
-  Upload,
-  Trash2,
-  Mic,
-  Key,
-  Search,
-  Brain,
+  Moon,
+  Palette,
+  RefreshCw,
+  Sun,
 } from 'lucide-react';
 import { useAppStore, type ThemeMode } from '../lib/store';
-import { checkHealth, fetchSpeechHealth, getMemoryStats } from '../lib/api';
+import { useConfigStore } from '../lib/configStore';
+import { ConfigForm } from '../components/settings/ConfigForm';
+import { RestartBanner } from '../components/settings/RestartBanner';
+import type {
+  ConfigDict,
+  ConfigSchema,
+  ConfigValue,
+} from '../lib/configApi';
 
-function OllamaModelList() {
-  const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
+const APPEARANCE_KEY = '__appearance__';
+
+// Preferred sidebar order.  Sections not in this list fall through to
+// alphabetical.  All items here map to dataclass names on JarvisConfig.
+const SECTION_ORDER = [
+  'engine',
+  'intelligence',
+  'agent',
+  'tools',
+  'channel',
+  'speech',
+  'security',
+  'telemetry',
+  'traces',
+  'scheduler',
+  'workflow',
+  'sessions',
+  'skills',
+  'digest',
+  'sandbox',
+  'learning',
+  'optimize',
+  'a2a',
+  'operators',
+  'agent_manager',
+  'memory_files',
+  'system_prompt',
+  'compression',
+  'server',
+  'hardware',
+];
+
+export function SettingsPage() {
+  const {
+    loadState,
+    error,
+    config,
+    schema,
+    hydrate,
+    patch,
+    reloadFromDisk,
+    resetSection,
+    lastReloadChangedCount,
+  } = useConfigStore();
+  const [active, setActive] = useState<string>(APPEARANCE_KEY);
+  const [filter, setFilter] = useState('');
+  const [reloading, setReloading] = useState(false);
+  const [reloadMsg, setReloadMsg] = useState<string | null>(null);
+
   useEffect(() => {
-    fetch('http://localhost:11434/api/tags')
-      .then(r => r.json())
-      .then(data => setModels((data.models || []).map((m: any) => ({ name: m.name, size: m.size }))))
-      .catch(() => setModels([]));
-  }, []);
-  if (models.length === 0) return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>No models loaded</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {models.map(m => (
-        <span key={m.name} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px]"
-          style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text)' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
-          {m.name} ({(m.size / 1e9).toFixed(1)} GB)
-        </span>
-      ))}
-    </div>
-  );
-}
+    if (loadState === 'idle') void hydrate();
+  }, [loadState, hydrate]);
 
-function ApiKeyInput({ storageKey, placeholder }: { storageKey: string; placeholder: string }) {
-  const [value, setValue] = useState(() => {
-    try { return localStorage.getItem(storageKey) || ''; } catch { return ''; }
-  });
-  const [saved, setSaved] = useState(false);
-  const save = (v: string) => {
-    setValue(v);
-    try { if (v) localStorage.setItem(storageKey, v); else localStorage.removeItem(storageKey); } catch {}
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    setReloadMsg(null);
+    try {
+      await reloadFromDisk();
+      // `lastReloadChangedCount` is refreshed by the store. Read it fresh.
+      const count = useConfigStore.getState().lastReloadChangedCount ?? 0;
+      setReloadMsg(
+        count === 0
+          ? 'Reloaded — no changes detected on disk.'
+          : `Reloaded — ${count} key${count === 1 ? '' : 's'} changed on disk.`,
+      );
+    } catch (exc) {
+      setReloadMsg(
+        `Reload failed: ${exc instanceof Error ? exc.message : String(exc)}`,
+      );
+    } finally {
+      setReloading(false);
+      setTimeout(() => setReloadMsg(null), 4000);
+    }
   };
+
+  const sectionKeys = useMemo(() => {
+    if (!schema) return [] as string[];
+    const known = new Set(Object.keys(schema.sections));
+    const ordered = SECTION_ORDER.filter((s) => known.has(s));
+    const extra = [...known].filter((s) => !ordered.includes(s)).sort();
+    return [...ordered, ...extra];
+  }, [schema]);
+
+  const filteredSectionKeys = useMemo(() => {
+    if (!filter.trim()) return sectionKeys;
+    const q = filter.toLowerCase();
+    return sectionKeys.filter((k) => {
+      const title = schema?.sections[k]?.title ?? k;
+      return k.toLowerCase().includes(q) || title.toLowerCase().includes(q);
+    });
+  }, [sectionKeys, schema, filter]);
+
   return (
-    <div className="flex items-center gap-2">
-      <input type="password" value={value} onChange={e => save(e.target.value)} placeholder={placeholder}
-        className="w-48 px-2 py-1 rounded text-xs"
-        style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} />
-      {saved && <span className="text-[10px]" style={{ color: 'var(--color-success)' }}>Saved</span>}
+    <div className="flex h-full">
+      <aside
+        className="w-64 shrink-0 flex flex-col border-r"
+        style={{
+          background: 'var(--color-surface)',
+          borderColor: 'var(--color-border)',
+        }}
+      >
+        <div
+          className="p-3 border-b"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          <h1
+            className="text-sm font-semibold"
+            style={{ color: 'var(--color-text)' }}
+          >
+            Settings
+          </h1>
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter…"
+            className="w-full mt-2 px-2 py-1 rounded text-xs"
+            style={{
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
+            }}
+          />
+        </div>
+        <nav className="flex-1 overflow-y-auto py-2">
+          <SidebarItem
+            label="Appearance"
+            active={active === APPEARANCE_KEY}
+            onClick={() => setActive(APPEARANCE_KEY)}
+          />
+          <div
+            className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wide"
+            style={{ color: 'var(--color-text-tertiary)' }}
+          >
+            Backend
+          </div>
+          {filteredSectionKeys.map((key) => (
+            <SidebarItem
+              key={key}
+              label={schema?.sections[key]?.title ?? key}
+              active={active === key}
+              onClick={() => setActive(key)}
+            />
+          ))}
+        </nav>
+        <footer
+          className="p-3 border-t flex flex-col gap-2"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          <button
+            type="button"
+            onClick={() => void handleReload()}
+            disabled={reloading}
+            title="Re-read config.toml from disk. Useful if you edited the file by hand or via `jarvis config set` in another shell."
+            className="text-xs px-2 py-1 rounded flex items-center justify-center gap-1 disabled:opacity-60"
+            style={{
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            <RefreshCw
+              className={`h-3 w-3 ${reloading ? 'animate-spin' : ''}`}
+            />
+            {reloading ? 'Reloading…' : 'Reload from disk'}
+          </button>
+          {reloadMsg && (
+            <div
+              className="text-[11px] text-center"
+              style={{ color: 'var(--color-text-tertiary)' }}
+            >
+              {reloadMsg}
+            </div>
+          )}
+        </footer>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto p-6 space-y-4">
+          <IntroHelp />
+          <RestartBanner />
+          {active === APPEARANCE_KEY ? (
+            <AppearancePane />
+          ) : (
+            <BackendSectionPane
+              sectionKey={active}
+              loadState={loadState}
+              error={error}
+              config={config}
+              schema={schema}
+              onPatch={patch}
+              onResetSection={resetSection}
+            />
+          )}
+        </div>
+      </main>
     </div>
   );
 }
 
-function CloudProviderStatus({ label, storageKey }: { label: string; storageKey: string }) {
-  const [hasKey, setHasKey] = useState(false);
-  useEffect(() => {
-    try { setHasKey(!!localStorage.getItem(storageKey)); } catch { setHasKey(false); }
-  }, [storageKey]);
-  return (
-    <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
-        background: hasKey ? 'var(--color-success)' : 'var(--color-text-tertiary)',
-      }} />
-      {label}
-    </span>
-  );
-}
+// ---------------------------------------------------------------------------
+// Intro help callout
+// ---------------------------------------------------------------------------
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function IntroHelp() {
+  const [open, setOpen] = useState(false);
   return (
     <div
-      className="rounded-xl p-5"
-      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+      className="rounded-lg text-xs"
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-text-secondary)',
+      }}
     >
-      <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
-        {title}
-      </h3>
-      {children}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+        style={{ color: 'var(--color-text)' }}
+      >
+        <HelpCircle className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1 font-medium">
+          How this page works
+        </span>
+        <span
+          className="text-[10px]"
+          style={{ color: 'var(--color-text-tertiary)' }}
+        >
+          {open ? 'Hide' : 'Show'}
+        </span>
+      </button>
+      {open && (
+        <div
+          className="px-3 pb-3 space-y-2 leading-relaxed"
+          style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+        >
+          <p className="pt-2">
+            <strong>Appearance</strong> is UI-only and saved in your browser.
+            Every other section is persisted to{' '}
+            <code>.openJarvis/config.toml</code> by the backend — the same
+            file you'd edit by hand or via <code>jarvis config set</code>.
+            OpenJarvis stores all of its data (DBs, audit logs, credentials,
+            skills, …) in this project-local <code>.openJarvis/</code>
+            folder, never in your home directory.
+          </p>
+          <p>
+            Changes are validated against the backend dataclass schema.
+            Most of them are applied immediately; changes to the engine,
+            server, or security middleware require a restart and are
+            flagged with a banner at the top of this page.
+          </p>
+          <p>
+            Secrets (API keys, tokens, passwords) are never sent to the
+            browser: you'll see <code>••••••••</code> once a value is
+            stored. Use <em>Change</em> to replace it, <em>Clear</em> to
+            remove it.
+          </p>
+          <p>
+            If you edit <code>.openJarvis/config.toml</code> from another
+            shell, click <strong>Reload from disk</strong> in the sidebar to
+            pick up the change without restarting the browser.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+
+function SidebarItem({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left px-3 py-1.5 text-xs"
+      style={{
+        background: active ? 'var(--color-bg-tertiary)' : 'transparent',
+        color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Appearance (local-only)
+// ---------------------------------------------------------------------------
+
+const THEMES: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
+
+function AppearancePane() {
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  return (
+    <section className="flex flex-col gap-4">
+      <header>
+        <h2
+          className="text-lg font-semibold flex items-center gap-2"
+          style={{ color: 'var(--color-text)' }}
+        >
+          <Palette className="h-4 w-4" />
+          Appearance
+        </h2>
+        <p
+          className="text-xs mt-0.5"
+          style={{ color: 'var(--color-text-tertiary)' }}
+        >
+          UI-only preferences. Saved to browser storage, not the backend.
+        </p>
+      </header>
+
+      <Row label="Theme">
+        <div className="flex gap-1">
+          {THEMES.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => updateSettings({ theme: value })}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs"
+              style={{
+                background:
+                  settings.theme === value
+                    ? 'var(--color-accent)'
+                    : 'var(--color-bg)',
+                color:
+                  settings.theme === value
+                    ? 'var(--color-accent-fg, white)'
+                    : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </Row>
+
+      <Row label="Font size">
+        <select
+          value={settings.fontSize}
+          onChange={(e) =>
+            updateSettings({
+              fontSize: e.target.value as 'small' | 'default' | 'large',
+            })
+          }
+          className="px-2 py-1 rounded text-xs"
+          style={{
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text)',
+          }}
+        >
+          <option value="small">Small</option>
+          <option value="default">Default</option>
+          <option value="large">Large</option>
+        </select>
+      </Row>
+
+      <Row label="API URL" description="Leave empty to use the default.">
+        <input
+          type="text"
+          value={settings.apiUrl}
+          onChange={(e) => updateSettings({ apiUrl: e.target.value })}
+          placeholder="http://localhost:8000"
+          className="w-64 px-2 py-1 rounded text-xs font-mono"
+          style={{
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text)',
+          }}
+        />
+      </Row>
+    </section>
+  );
+}
+
+function Row({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between py-2"
+      style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+    >
       <div>
-        <div className="text-sm" style={{ color: 'var(--color-text)' }}>{label}</div>
+        <div className="text-sm" style={{ color: 'var(--color-text)' }}>
+          {label}
+        </div>
         {description && (
-          <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>{description}</div>
+          <div
+            className="text-xs mt-0.5"
+            style={{ color: 'var(--color-text-tertiary)' }}
+          >
+            {description}
+          </div>
         )}
       </div>
       <div>{children}</div>
@@ -107,481 +459,153 @@ function SettingRow({ label, description, children }: { label: string; descripti
   );
 }
 
-const themeOptions: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-];
+// ---------------------------------------------------------------------------
+// Backend section
+// ---------------------------------------------------------------------------
 
-export function SettingsPage() {
-  const settings = useAppStore((s) => s.settings);
-  const updateSettings = useAppStore((s) => s.updateSettings);
-  const conversations = useAppStore((s) => s.conversations);
-  const serverInfo = useAppStore((s) => s.serverInfo);
-  const [healthy, setHealthy] = useState<boolean | null>(null);
-  const [speechBackendAvailable, setSpeechBackendAvailable] = useState<boolean | null>(null);
-  const [saved, setSaved] = useState(false);
+// Short helper descriptions keyed by section name.  Rendered above the form.
+// Keep these to one or two sentences — the full docs live in mkdocs.
+const SECTION_HELP: Record<string, string> = {
+  engine:
+    'Which local inference runtime to talk to (ollama, vllm, mlx, …). Changing the engine requires a restart.',
+  intelligence:
+    'The default model and generation parameters (temperature, max tokens, top-p).',
+  agent:
+    'Agent harness: which agent to run by default, how many turns, system prompt.',
+  tools:
+    'Memory backend, MCP servers, browser automation, and the default set of tools agents can call.',
+  channel:
+    'Inbound messaging integrations (Telegram, Slack, Discord, Email, …). Each sub-section holds credentials for one transport.',
+  speech:
+    'Speech-to-text backend and model used for voice input.',
+  security:
+    'Guardrails, PII/secret scanners, SSRF protection, rate limits. "block" refuses unsafe calls, "redact" masks them, "warn" only logs.',
+  telemetry:
+    'Persisted run metrics (latency, tokens, GPU utilisation). Disable for maximum privacy.',
+  traces:
+    'Full request/response traces used by learning, evaluation, and debugging.',
+  scheduler:
+    'Cron-style job runner that fires scheduled agents and workflows.',
+  workflow:
+    'Multi-step graph runner for composing agents and tools.',
+  sessions:
+    'Cross-channel conversation memory — how long to keep sessions around and when to consolidate.',
+  skills:
+    'Procedural skills (shell-level recipes) that agents can author and replay.',
+  digest:
+    'Morning digest: what to summarise, when, and which voice to speak it in.',
+  sandbox:
+    'Containerised code execution for untrusted tools (Docker / Podman / WASM).',
+  learning:
+    'Trace-driven policy optimisation. Turn on individual learners (routing, SFT/GRPO, DSPy/GEPA) as needed.',
+  optimize:
+    'Auto-tune configuration with benchmarks. Runs a small meta-optimiser over the config surface.',
+  a2a: 'Agent-to-Agent protocol: expose this OpenJarvis as an A2A server.',
+  operators:
+    'Long-running operator manifests — background agents with their own memory and tools.',
+  agent_manager: 'Persistent, user-authored agents (saved in a local SQLite DB).',
+  memory_files:
+    'Paths to SOUL / MEMORY / USER markdown files that persist long-term context.',
+  system_prompt: 'How the final system prompt is assembled and truncated.',
+  compression: 'Context-window compression strategy and threshold.',
+  server:
+    'HTTP API host, port, workers, and CORS origins. Most fields require a restart to take effect.',
+  hardware:
+    'Auto-detected hardware info. Read-only; OpenJarvis uses this to recommend engines and models.',
+};
 
-  const [memoryStats, setMemoryStats] = useState<{ entries: number; backend: string } | null>(null);
-  const [memoryEnabled, setMemoryEnabled] = useState(() => {
-    try { return localStorage.getItem('openjarvis-memory-enabled') !== 'false'; } catch { return true; }
-  });
-  const [memoryBackend, setMemoryBackend] = useState(() => {
-    try { return localStorage.getItem('openjarvis-memory-backend') || 'sqlite'; } catch { return 'sqlite'; }
-  });
-  const [memoryTopK, setMemoryTopK] = useState(() => {
-    try { return parseInt(localStorage.getItem('openjarvis-memory-top-k') || '5'); } catch { return 5; }
-  });
-  const [memoryMinScore, setMemoryMinScore] = useState(() => {
-    try { return parseFloat(localStorage.getItem('openjarvis-memory-min-score') || '0.1'); } catch { return 0.1; }
-  });
-  const [memoryMaxTokens, setMemoryMaxTokens] = useState(() => {
-    try { return parseInt(localStorage.getItem('openjarvis-memory-max-tokens') || '2048'); } catch { return 2048; }
-  });
+interface BackendSectionPaneProps {
+  sectionKey: string;
+  loadState: 'idle' | 'loading' | 'ready' | 'error';
+  error: string | null;
+  config: ConfigDict | null;
+  schema: ConfigSchema | null;
+  onPatch: (patch: Record<string, ConfigValue>) => Promise<void>;
+  onResetSection: (section: string) => Promise<void>;
+}
 
-  useEffect(() => {
-    checkHealth().then(setHealthy);
-    fetchSpeechHealth()
-      .then((h) => setSpeechBackendAvailable(h.available))
-      .catch(() => setSpeechBackendAvailable(false));
-    getMemoryStats()
-      .then(setMemoryStats)
-      .catch(() => setMemoryStats(null));
-  }, []);
+function BackendSectionPane({
+  sectionKey,
+  loadState,
+  error,
+  config,
+  schema,
+  onPatch,
+  onResetSection,
+}: BackendSectionPaneProps) {
+  if (loadState === 'loading' || loadState === 'idle') {
+    return (
+      <div
+        className="text-xs"
+        style={{ color: 'var(--color-text-tertiary)' }}
+      >
+        Loading configuration…
+      </div>
+    );
+  }
+  if (loadState === 'error') {
+    return (
+      <div
+        className="rounded p-3 text-xs"
+        style={{
+          background: 'var(--color-error-bg, #fee2e2)',
+          color: 'var(--color-error-fg, #991b1b)',
+        }}
+      >
+        Failed to load configuration: {error}
+      </div>
+    );
+  }
+  if (!config || !schema) return null;
 
-  const showSaved = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
+  const section = schema.sections[sectionKey];
+  if (!section) {
+    return (
+      <div
+        className="text-xs"
+        style={{ color: 'var(--color-text-tertiary)' }}
+      >
+        Unknown section: {sectionKey}
+      </div>
+    );
+  }
 
-  const handleExport = () => {
-    const data = localStorage.getItem('openjarvis-conversations') || '{}';
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `openjarvis-export-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target?.result as string);
-          if (data.version === 1) {
-            localStorage.setItem('openjarvis-conversations', JSON.stringify(data));
-            useAppStore.getState().loadConversations();
-            showSaved();
-          }
-        } catch {}
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-
-  const [confirmClear, setConfirmClear] = useState(false);
-  const handleClear = () => {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      setTimeout(() => setConfirmClear(false), 3000);
-      return;
-    }
-    localStorage.removeItem('openjarvis-conversations');
-    useAppStore.getState().loadConversations();
-    setConfirmClear(false);
-    showSaved();
-  };
+  const help = SECTION_HELP[sectionKey];
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-10">
-      <div className="max-w-2xl mx-auto">
-        <header className="mb-6">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-              Settings
-            </h1>
-            {saved && (
-              <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full" style={{
-                background: 'var(--color-accent-subtle)',
-                color: 'var(--color-success)',
-              }}>
-                <Check size={12} /> Saved
-              </span>
-            )}
+    <div className="flex flex-col gap-3">
+      {help && (
+        <div
+          className="rounded flex items-start gap-2 px-3 py-2 text-xs"
+          style={{
+            background: 'var(--color-bg-tertiary)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          <Info
+            className="h-3.5 w-3.5 shrink-0 mt-0.5"
+            style={{ color: 'var(--color-text-tertiary)' }}
+          />
+          <div>
+            <p>{help}</p>
+            <p
+              className="mt-1 text-[10px]"
+              style={{ color: 'var(--color-text-tertiary)' }}
+            >
+              Persisted to{' '}
+              <code>.openJarvis/config.toml</code> under{' '}
+              <code>[{sectionKey}]</code>.
+            </p>
           </div>
-          <p className="text-sm mt-2 max-w-2xl" style={{ color: 'var(--color-text-secondary)' }}>
-            App preferences — appearance, model defaults, keyboard shortcuts, and data management.
-          </p>
-        </header>
-
-        <div className="flex flex-col gap-4">
-          {/* Appearance */}
-          <Section title="Appearance">
-            <SettingRow label="Theme" description="Choose how OpenJarvis looks">
-              <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--color-bg-secondary)' }}>
-                {themeOptions.map((opt) => {
-                  const isActive = settings.theme === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => { updateSettings({ theme: opt.value }); showSaved(); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer"
-                      style={{
-                        background: isActive ? 'var(--color-surface)' : 'transparent',
-                        color: isActive ? 'var(--color-text)' : 'var(--color-text-tertiary)',
-                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
-                      }}
-                    >
-                      <opt.icon size={14} />
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </SettingRow>
-            <SettingRow label="Font size">
-              <select
-                value={settings.fontSize}
-                onChange={(e) => { updateSettings({ fontSize: e.target.value as any }); showSaved(); }}
-                className="text-sm px-3 py-1.5 rounded-lg outline-none cursor-pointer"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                <option value="small">Small</option>
-                <option value="default">Default</option>
-                <option value="large">Large</option>
-              </select>
-            </SettingRow>
-          </Section>
-
-          {/* Connection */}
-          <Section title="Connection">
-            <SettingRow label="Server status" description={serverInfo ? `${serverInfo.engine} / ${serverInfo.model}` : 'Not connected'}>
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: healthy === true ? 'var(--color-success)' : healthy === false ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}
-                />
-                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {healthy === true ? 'Connected' : healthy === false ? 'Disconnected' : 'Checking...'}
-                </span>
-              </div>
-            </SettingRow>
-            <SettingRow label="API URL" description="Set if backend runs on a different port or host">
-              <input
-                type="text"
-                value={settings.apiUrl}
-                onChange={(e) => { updateSettings({ apiUrl: e.target.value }); showSaved(); }}
-                placeholder="http://localhost:8000"
-                className="text-sm px-3 py-1.5 rounded-lg outline-none w-56"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}
-              />
-            </SettingRow>
-          </Section>
-
-          {/* Models */}
-          <Section title="Models">
-            <SettingRow label="Local models (Ollama)" description="Models available for local inference">
-              <OllamaModelList />
-            </SettingRow>
-            <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-              Run <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--color-bg-tertiary)' }}>ollama pull &lt;model-name&gt;</code> in your terminal to add more models
-            </div>
-            <SettingRow label="Cloud providers" description="Green dot means API key is configured">
-              <div className="flex flex-wrap gap-3">
-                <CloudProviderStatus label="OpenAI" storageKey="openjarvis-openai-key" />
-                <CloudProviderStatus label="Anthropic" storageKey="openjarvis-anthropic-key" />
-                <CloudProviderStatus label="Google" storageKey="openjarvis-gemini-key" />
-                <CloudProviderStatus label="OpenRouter" storageKey="openjarvis-openrouter-key" />
-              </div>
-            </SettingRow>
-          </Section>
-
-          {/* API Keys */}
-          <Section title="API Keys">
-            <SettingRow label="OpenAI" description="GPT-4, GPT-3.5, etc.">
-              <ApiKeyInput storageKey="openjarvis-openai-key" placeholder="sk-..." />
-            </SettingRow>
-            <SettingRow label="Anthropic" description="Claude models">
-              <ApiKeyInput storageKey="openjarvis-anthropic-key" placeholder="sk-ant-..." />
-            </SettingRow>
-            <SettingRow label="Google" description="Gemini models">
-              <ApiKeyInput storageKey="openjarvis-gemini-key" placeholder="AI..." />
-            </SettingRow>
-            <SettingRow label="OpenRouter" description="Multi-provider routing">
-              <ApiKeyInput storageKey="openjarvis-openrouter-key" placeholder="sk-or-..." />
-            </SettingRow>
-          </Section>
-
-          {/* Tools */}
-          <Section title="Tools">
-            <SettingRow label="Web Search" description="SerpAPI or Tavily key for web search tool">
-              <ApiKeyInput storageKey="openjarvis-search-key" placeholder="API key..." />
-            </SettingRow>
-          </Section>
-
-          {/* Memory */}
-          <Section title="Memory">
-            <SettingRow label="Memory status" description={memoryStats ? `${memoryStats.backend} backend — ${memoryStats.entries} entries` : 'Unable to reach memory service'}>
-              <div className="flex items-center gap-2">
-                <Brain size={14} style={{ color: memoryStats ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
-                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {memoryStats ? `${memoryStats.entries} entries` : 'Unavailable'}
-                </span>
-              </div>
-            </SettingRow>
-            <SettingRow label="Use memory context" description="Automatically inject relevant memories into conversations">
-              <button
-                onClick={() => {
-                  const next = !memoryEnabled;
-                  setMemoryEnabled(next);
-                  try { localStorage.setItem('openjarvis-memory-enabled', String(next)); } catch {}
-                  showSaved();
-                }}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
-                style={{
-                  background: memoryEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                }}
-              >
-                <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
-                  style={{
-                    transform: memoryEnabled ? 'translateX(20px)' : 'translateX(0)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }}
-                />
-              </button>
-            </SettingRow>
-            <SettingRow label="Memory backend" description="Which retrieval engine to use">
-              <select
-                value={memoryBackend}
-                onChange={(e) => {
-                  setMemoryBackend(e.target.value);
-                  try { localStorage.setItem('openjarvis-memory-backend', e.target.value); } catch {}
-                  showSaved();
-                }}
-                className="text-sm px-3 py-1.5 rounded-lg outline-none cursor-pointer"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                <option value="sqlite">sqlite</option>
-                <option value="faiss">faiss</option>
-                <option value="bm25">bm25</option>
-                <option value="colbert">colbert</option>
-                <option value="hybrid">hybrid</option>
-              </select>
-            </SettingRow>
-            <SettingRow label="Results to inject" description={`${memoryTopK}`}>
-              <input
-                type="range"
-                min="1"
-                max="20"
-                step="1"
-                value={memoryTopK}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  setMemoryTopK(v);
-                  try { localStorage.setItem('openjarvis-memory-top-k', String(v)); } catch {}
-                  showSaved();
-                }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
-              />
-            </SettingRow>
-            <SettingRow label="Min relevance score" description={`${memoryMinScore}`}>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={memoryMinScore}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setMemoryMinScore(v);
-                  try { localStorage.setItem('openjarvis-memory-min-score', String(v)); } catch {}
-                  showSaved();
-                }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
-              />
-            </SettingRow>
-            <SettingRow label="Max context tokens" description={`${memoryMaxTokens}`}>
-              <input
-                type="range"
-                min="256"
-                max="8192"
-                step="256"
-                value={memoryMaxTokens}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  setMemoryMaxTokens(v);
-                  try { localStorage.setItem('openjarvis-memory-max-tokens', String(v)); } catch {}
-                  showSaved();
-                }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
-              />
-            </SettingRow>
-          </Section>
-
-          {/* Model defaults */}
-          <Section title="Model Defaults">
-            <SettingRow label="Temperature" description={`${settings.temperature}`}>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={settings.temperature}
-                onChange={(e) => { updateSettings({ temperature: parseFloat(e.target.value) }); showSaved(); }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
-              />
-            </SettingRow>
-            <SettingRow label="Max tokens" description={`${settings.maxTokens}`}>
-              <input
-                type="range"
-                min="256"
-                max="32768"
-                step="256"
-                value={settings.maxTokens}
-                onChange={(e) => { updateSettings({ maxTokens: parseInt(e.target.value) }); showSaved(); }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
-              />
-            </SettingRow>
-          </Section>
-
-          {/* Speech */}
-          <Section title="Speech">
-            <SettingRow label="Speech-to-Text" description="Enable microphone input for voice dictation">
-              <button
-                onClick={() => { updateSettings({ speechEnabled: !settings.speechEnabled }); showSaved(); }}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
-                style={{
-                  background: settings.speechEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                }}
-              >
-                <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
-                  style={{
-                    transform: settings.speechEnabled ? 'translateX(20px)' : 'translateX(0)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }}
-                />
-              </button>
-            </SettingRow>
-            <SettingRow label="Backend status" description="Requires Whisper, Deepgram, or another speech backend">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{
-                    background: speechBackendAvailable === true ? 'var(--color-success)'
-                      : speechBackendAvailable === false ? 'var(--color-text-tertiary)'
-                      : 'var(--color-text-tertiary)',
-                  }}
-                />
-                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {speechBackendAvailable === null ? 'Checking...'
-                    : speechBackendAvailable ? 'Available'
-                    : 'Not configured'}
-                </span>
-              </div>
-            </SettingRow>
-            {!speechBackendAvailable && speechBackendAvailable !== null && (
-              <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                Set up a speech backend to use voice input.
-                See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
-              </div>
-            )}
-          </Section>
-
-          {/* Data */}
-          <Section title="Data">
-            <SettingRow label="Conversations" description={`${conversations.length} stored locally`}>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleExport}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                  style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
-                >
-                  <Download size={12} /> Export
-                </button>
-                <button
-                  onClick={handleImport}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                  style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-tertiary)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg-secondary)')}
-                >
-                  <Upload size={12} /> Import
-                </button>
-              </div>
-            </SettingRow>
-            <SettingRow label="Clear all data" description="Permanently delete all conversations">
-              <button
-                onClick={handleClear}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                style={{
-                  color: confirmClear ? 'white' : 'var(--color-error)',
-                  background: confirmClear ? 'var(--color-error)' : 'transparent',
-                  border: '1px solid var(--color-error)',
-                }}
-                onMouseEnter={(e) => { if (!confirmClear) e.currentTarget.style.background = 'rgba(220,38,38,0.1)'; }}
-                onMouseLeave={(e) => { if (!confirmClear) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <Trash2 size={12} /> {confirmClear ? 'Click again to confirm' : 'Clear'}
-              </button>
-            </SettingRow>
-          </Section>
-
-          {/* About */}
-          <Section title="About">
-            <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              <p className="mb-2">
-                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>OpenJarvis</span> — Programming abstractions for on-device AI.
-              </p>
-              <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                Part of Intelligence Per Watt, a research initiative at Stanford SAIL.
-              </p>
-              <div className="flex gap-3 mt-3 text-xs">
-                <a
-                  href="https://scalingintelligence.stanford.edu/blogs/openjarvis/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--color-accent)' }}
-                >
-                  Project site
-                </a>
-                <a
-                  href="https://open-jarvis.github.io/OpenJarvis/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--color-accent)' }}
-                >
-                  Documentation
-                </a>
-              </div>
-            </div>
-          </Section>
         </div>
-      </div>
+      )}
+      <ConfigForm
+        sectionKey={sectionKey}
+        section={section}
+        config={config}
+        onPatch={onPatch}
+        onResetSection={() => onResetSection(sectionKey)}
+      />
     </div>
   );
 }

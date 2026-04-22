@@ -1,6 +1,7 @@
 """Configuration loading, hardware detection, and engine recommendation.
 
-User configuration lives at ``~/.openjarvis/config.toml``.  ``load_config()``
+User configuration lives at ``.openJarvis/config.toml`` (relative to the
+current working directory).  ``load_config()``
 detects hardware, fills sensible defaults, then overlays any user overrides
 found in the TOML file.
 """
@@ -661,7 +662,7 @@ class SkillsLearningConfig:
     optimizer: str = "dspy"  # "dspy" or "gepa"
     min_traces_per_skill: int = 20
     optimization_interval_seconds: int = 86400
-    overlay_dir: str = "~/.openjarvis/learning/skills/"
+    overlay_dir: str = str(DEFAULT_CONFIG_DIR / "learning" / "skills") + "/"
 
 
 @dataclass(slots=True)
@@ -1004,7 +1005,7 @@ class BlueBubblesChannelConfig:
 class WhatsAppBaileysChannelConfig:
     """Per-channel config for WhatsApp via Baileys protocol."""
 
-    auth_dir: str = ""  # Defaults to ~/.openjarvis/whatsapp_auth
+    auth_dir: str = ""  # Defaults to .openJarvis/whatsapp_auth
     assistant_name: str = "Jarvis"
     assistant_has_own_number: bool = False
 
@@ -1205,7 +1206,7 @@ class OperatorsConfig:
     """Operator lifecycle settings."""
 
     enabled: bool = False
-    manifests_dir: str = "~/.openjarvis/operators"
+    manifests_dir: str = str(DEFAULT_CONFIG_DIR / "operators")
     auto_activate: str = ""  # Comma-separated operator IDs
 
 
@@ -1246,9 +1247,9 @@ class AgentManagerConfig:
 class MemoryFilesConfig:
     """Persistent memory-file paths and nudge settings."""
 
-    soul_path: str = "~/.openjarvis/SOUL.md"
-    memory_path: str = "~/.openjarvis/MEMORY.md"
-    user_path: str = "~/.openjarvis/USER.md"
+    soul_path: str = str(DEFAULT_CONFIG_DIR / "SOUL.md")
+    memory_path: str = str(DEFAULT_CONFIG_DIR / "MEMORY.md")
+    user_path: str = str(DEFAULT_CONFIG_DIR / "USER.md")
     nudge_interval: int = 10
 
 
@@ -1287,13 +1288,13 @@ class SkillsConfig:
     """Configuration for agent-authored procedural skills."""
 
     enabled: bool = True
-    skills_dir: str = "~/.openjarvis/skills/"
+    skills_dir: str = str(DEFAULT_CONFIG_DIR / "skills") + "/"
     active: str = "*"
     auto_discover: bool = True
     auto_sync: bool = False
     nudge_interval: int = 15
     index_repo: str = "https://github.com/openjarvis/skill-index.git"
-    index_dir: str = "~/.openjarvis/skill-index/"
+    index_dir: str = str(DEFAULT_CONFIG_DIR / "skill-index") + "/"
     max_depth: int = 5
     sandbox_dangerous: bool = True
     sources: List[SkillSourceConfig] = field(default_factory=list)
@@ -1538,7 +1539,7 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
     ----------
     path:
         Explicit config file. If not set, uses ``OPENJARVIS_CONFIG`` when set,
-        otherwise ``~/.openjarvis/config.toml``.
+        otherwise ``.openJarvis/config.toml`` (project-local).
     """
     _ensure_config_dir()
     hw = detect_hardware()
@@ -1649,7 +1650,7 @@ enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]
 def generate_default_toml(
     hw: HardwareInfo, engine: str | None = None, *, host: str | None = None
 ) -> str:
-    """Render a commented TOML string suitable for ``~/.openjarvis/config.toml``."""
+    """Render a commented TOML string suitable for ``.openJarvis/config.toml``."""
     engine = engine or recommend_engine(hw)
     model = recommend_model(hw, engine)
     gpu_line = ""
@@ -1851,7 +1852,7 @@ ssrf_protection = true
 # db_path = ""                # Defaults to .openJarvis/db/scheduler.db
 
 # [channel.whatsapp_baileys]
-# auth_dir = ""               # Defaults to ~/.openjarvis/whatsapp_auth
+# auth_dir = ""               # Defaults to .openJarvis/whatsapp_auth
 # assistant_name = "Jarvis"
 # assistant_has_own_number = false
 """

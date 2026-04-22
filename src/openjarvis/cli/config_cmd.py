@@ -316,21 +316,24 @@ def _coerce_value(value: str, target_type: type) -> object:
 @click.argument("key")
 @click.argument("value")
 def set_config(key: str, value: str) -> None:
-    """Set a configuration value (e.g. jarvis config set engine.ollama.host URL)."""
-    import tomlkit
+    """Set a configuration value (e.g. jarvis config set engine.ollama.host URL).
 
-    from openjarvis.core.config import DEFAULT_CONFIG_DIR, validate_config_key
+    Routes through :class:`ConfigService` so the CLI and the SettingsPage
+    UI share the same writer (atomic writes, comment preservation, secret
+    masking, schema validation).
+    """
+    from openjarvis.core.config import validate_config_key
+    from openjarvis.core.config_service import ConfigService, PatchError
 
     console = Console(stderr=True)
 
-    # Validate key
+    # Validate key + discover target type for coercion.
     try:
         target_type = validate_config_key(key)
     except ValueError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(1)
 
-    # Coerce value
     try:
         typed_value = _coerce_value(value, target_type)
     except (ValueError, TypeError) as exc:
@@ -340,27 +343,19 @@ def set_config(key: str, value: str) -> None:
         )
         raise SystemExit(1)
 
-    # Load or create TOML document
-    config_path = Path(
-        os.environ.get("OPENJARVIS_CONFIG", DEFAULT_CONFIG_DIR / "config.toml")
-    )
-    if config_path.exists():
-        doc = tomlkit.parse(config_path.read_text())
-    else:
-        doc = tomlkit.document()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Set nested key
-    parts = key.split(".")
-    current = doc
-    for part in parts[:-1]:
-        if part not in current:
-            current.add(part, tomlkit.table())
-        current = current[part]
-    current[parts[-1]] = typed_value
-
-    # Write back
-    config_path.write_text(tomlkit.dumps(doc))
+    # Delegate writing to the shared service.  Path resolution mirrors
+    # the old behaviour: respect $OPENJARVIS_CONFIG, else default path.
+    config_path = _get_config_path(None)
+    try:
+        service = ConfigService(path=config_path)
+        service.apply_patch({key: typed_value})
+    except PatchError as exc:
+        for field, detail in exc.errors.items():
+            console.print(f"[red]Error:[/red] {field}: {detail}")
+        raise SystemExit(1)
+    except Exception as exc:  # pragma: no cover - defensive
+        console.print(f"[red]Error:[/red] {exc}")
+        raise SystemExit(1)
 
     console.print(f"[green]Set[/green] {key} = {value!r}")
 
