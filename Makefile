@@ -3,20 +3,30 @@ API     := curl -sf $(URL)
 FMT     := python3 -m json.tool 2>/dev/null
 UV      := source $$HOME/.local/bin/env 2>/dev/null; uv
 
-.PHONY: install build start debug stop restart logs status health \
+.PHONY: install build build-rust start debug stop restart logs status health \
         info models agents sessions memory skills traces channels \
         connectors telemetry energy savings budget voice-health \
         security chat ollama-check check help
 
 ## ── Setup ────────────────────────────────────────────────────
 
-## install      – install Python + frontend deps locally
+## install      – install Python + frontend deps + Rust extension locally
 install:
 	@echo "Installing Python deps..."
 	$(UV) sync --extra server --extra inference-google --extra inference-cloud --extra memory-faiss --extra speech --extra scheduler --extra tools-search --extra dev
 	@echo "Installing frontend deps..."
 	cd frontend && npm install
+	@$(MAKE) build-rust
 	@echo "Done."
+
+## build-rust   – compile the Rust extension (openjarvis_rust) via maturin
+build-rust:
+	@command -v cargo >/dev/null 2>&1 || { echo "Error: Rust toolchain not found. Install from https://rustup.rs then re-run."; exit 1; }
+	@echo "Installing maturin..."
+	$(UV) pip install "maturin>=1.0,<2.0" -q
+	@echo "Building Rust extension (first build may take a few minutes)..."
+	export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1; $(UV) run maturin develop --release --manifest-path rust/crates/openjarvis-python/Cargo.toml
+	@echo "Rust extension built successfully."
 
 ## build        – build frontend for production (into static/)
 build:
