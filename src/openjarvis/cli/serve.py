@@ -501,6 +501,26 @@ def serve(
             "authenticated requests to your instance."
         )
 
+    import logging
     import uvicorn
+
+    # Suppress access logs for noisy polling endpoints that are irrelevant
+    # to tracing the core request flow.
+    _SKIP_PATHS = {
+        "/health",
+        "/v1/telemetry/stats",
+        "/v1/telemetry/energy",
+        "/v1/connectors",
+        "/v1/info",
+        "/v1/savings",
+        "/v1/budget",
+    }
+
+    class _AccessLogFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return not any(path in msg for path in _SKIP_PATHS)
+
+    logging.getLogger("uvicorn.access").addFilter(_AccessLogFilter())
 
     uvicorn.run(app, host=bind_host, port=bind_port, log_level="info")
