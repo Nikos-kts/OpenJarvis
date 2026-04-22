@@ -7,6 +7,7 @@ to the five existing primitives (Intelligence, Agent, Tools, Engine, Learning).
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -86,6 +87,8 @@ CREATE TABLE IF NOT EXISTS agent_learning_log (
 
 _SUMMARY_MAX = 2000
 
+logger = logging.getLogger(__name__)
+
 
 class AgentManager:
     """Persistent agent lifecycle manager with SQLite backing."""
@@ -123,9 +126,11 @@ class AgentManager:
             except sqlite3.OperationalError:
                 pass  # Column already exists
         self._conn.commit()
+        logger.debug("AgentManager initialized with DB path: %s", self._db_path)
 
     def close(self) -> None:
         self._conn.close()
+        logger.debug("AgentManager connection closed")
 
     # ── Agent CRUD ────────────────────────────────────────────────
 
@@ -146,6 +151,7 @@ class AgentManager:
             (agent_id, name, agent_type, config_json, now, now),
         )
         self._conn.commit()
+        logger.debug("Created managed agent: id=%s type=%s", agent_id, agent_type)
         return self.get_agent(agent_id)  # type: ignore[return-value]
 
     def list_agents(self, include_archived: bool = False) -> List[Dict[str, Any]]:
@@ -154,6 +160,11 @@ class AgentManager:
             query += " WHERE status != 'archived'"
         query += " ORDER BY updated_at DESC"
         rows = self._conn.execute(query).fetchall()
+        logger.debug(
+            "Listed managed agents: count=%d include_archived=%s",
+            len(rows),
+            include_archived,
+        )
         return [self._row_to_agent(r) for r in rows]
 
     def get_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
@@ -207,6 +218,7 @@ class AgentManager:
             f"UPDATE managed_agents SET {', '.join(sets)} WHERE id = ?", vals
         )
         self._conn.commit()
+        logger.debug("Updated managed agent: id=%s fields=%s", agent_id, sets)
         return self.get_agent(agent_id)  # type: ignore[return-value]
 
     def delete_agent(self, agent_id: str) -> None:
@@ -224,6 +236,7 @@ class AgentManager:
             (status, time.time(), agent_id),
         )
         self._conn.commit()
+        logger.debug("Set managed agent status: id=%s status=%s", agent_id, status)
 
     # ── Tick concurrency guard ────────────────────────────────────
 
@@ -231,8 +244,13 @@ class AgentManager:
         """Mark agent as running. Raises ValueError if already running."""
         agent = self.get_agent(agent_id)
         if agent and agent["status"] == "running":
+            logger.warning(
+                "Rejected tick start for already-running agent: %s",
+                agent_id,
+            )
             raise ValueError(f"Agent {agent_id} is already executing a tick")
         self._set_status(agent_id, "running")
+        logger.debug("Started tick for managed agent: %s", agent_id)
 
     def end_tick(self, agent_id: str) -> None:
         self._conn.execute(
@@ -241,6 +259,7 @@ class AgentManager:
             (time.time(), agent_id),
         )
         self._conn.commit()
+        logger.debug("Ended tick for managed agent: %s", agent_id)
 
     # ── Checkpoints ───────────────────────────────────────────────
 
@@ -276,6 +295,7 @@ class AgentManager:
             (agent_id, agent_id, self._CHECKPOINT_RETENTION),
         )
         self._conn.commit()
+        logger.debug("Saved checkpoint for agent %s tick %s", agent_id, tick_id)
         return {
             "id": cp_id,
             "agent_id": agent_id,
@@ -303,6 +323,7 @@ class AgentManager:
         checkpoint = self.get_latest_checkpoint(agent_id)
         # Always reset to idle — clearing the error state is the primary purpose
         self.update_agent(agent_id, status="idle")
+        logger.debug("Recovered managed agent to idle: %s", agent_id)
         return checkpoint
 
     @staticmethod
@@ -339,6 +360,12 @@ class AgentManager:
             (task_id, agent_id, description, status, now),
         )
         self._conn.commit()
+        logger.debug(
+            "Created task: id=%s agent_id=%s status=%s",
+            task_id,
+            agent_id,
+            status,
+        )
         return self._get_task(task_id)  # type: ignore[return-value]
 
     def list_tasks(
@@ -367,12 +394,14 @@ class AgentManager:
             sets.append("findings_json = ?")
             vals.append(json.dumps(kwargs["findings"]))
         if not sets:
+            logger.debug("No-op task update for task_id=%s", task_id)
             return self._get_task(task_id)  # type: ignore[return-value]
         vals.append(task_id)
         self._conn.execute(
             f"UPDATE agent_tasks SET {', '.join(sets)} WHERE id = ?", vals
         )
         self._conn.commit()
+        logger.debug("Updated task: id=%s fields=%s", task_id, sets)
         return self._get_task(task_id)  # type: ignore[return-value]
 
     def delete_task(self, task_id: str) -> None:
@@ -404,6 +433,12 @@ class AgentManager:
             (binding_id, agent_id, channel_type, config_json, session_id, routing_mode),
         )
         self._conn.commit()
+        logger.debug(
+            "Bound channel: binding_id=%s agent_id=%s channel_type=%s",
+            binding_id,
+            agent_id,
+            channel_type,
+        )
         return self._get_binding(binding_id)  # type: ignore[return-value]
 
     def list_channel_bindings(self, agent_id: str) -> List[Dict[str, Any]]:
@@ -513,6 +548,12 @@ class AgentManager:
         )
         self._conn.execute(_sql, (msg_id, agent_id, content, mode, now))
         self._conn.commit()
+        logger.debug(
+            "Queued user->agent message: msg_id=%s agent_id=%s mode=%s",
+            msg_id,
+            agent_id,
+            mode,
+        )
         return {
             "id": msg_id,
             "agent_id": agent_id,
@@ -547,6 +588,7 @@ class AgentManager:
             (msg_id, agent_id, content, now, tool_calls_json),
         )
         self._conn.commit()
+        logger.debug("Stored agent response: msg_id=%s agent_id=%s", msg_id, agent_id)
         return {
             "id": msg_id,
             "agent_id": agent_id,

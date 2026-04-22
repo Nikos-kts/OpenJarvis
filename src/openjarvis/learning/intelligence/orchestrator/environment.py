@@ -8,6 +8,7 @@ both training and evaluation.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import List, Tuple
 
@@ -18,6 +19,8 @@ from openjarvis.learning.intelligence.orchestrator.types import (
     OrchestratorObservation,
 )
 from openjarvis.tools._stubs import BaseTool, ToolExecutor
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorEnvironment:
@@ -49,6 +52,7 @@ class OrchestratorEnvironment:
         Returns:
             A fresh :class:`EpisodeState`.
         """
+        logger.debug("Orchestrator environment reset")
         return EpisodeState(initial_prompt=task)
 
     def step(
@@ -64,11 +68,16 @@ class OrchestratorEnvironment:
         available = self.get_available_tools()
 
         if action.tool_name not in available:
+            logger.warning(
+                "Rejected orchestrator action: unavailable tool=%s",
+                action.tool_name,
+            )
             raise ValueError(
                 f"Tool '{action.tool_name}' not available. Available: {available}"
             )
 
         if state.num_turns() >= self._max_turns:
+            logger.warning("Rejected orchestrator action: max turns exceeded")
             raise ValueError(f"Max turns ({self._max_turns}) exceeded")
 
         # Execute tool via ToolExecutor
@@ -83,6 +92,12 @@ class OrchestratorEnvironment:
         t0 = time.time()
         result = self._executor.execute(tool_call)
         latency = time.time() - t0
+        logger.debug(
+            "Orchestrator tool call complete: tool=%s latency=%.3fs success=%s",
+            action.tool_name,
+            latency,
+            result.success,
+        )
 
         observation = OrchestratorObservation(
             content=result.content,

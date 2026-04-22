@@ -13,6 +13,7 @@ Typical usage::
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Optional
 
 from openjarvis.connectors._stubs import Attachment, Document
@@ -21,6 +22,8 @@ from openjarvis.connectors.store import KnowledgeStore
 
 if TYPE_CHECKING:
     from openjarvis.connectors.attachment_store import AttachmentStore
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
@@ -61,6 +64,7 @@ class IngestionPipeline:
             "SELECT DISTINCT doc_id FROM knowledge_chunks"
         ).fetchall()
         self._seen_doc_ids = {r[0] for r in rows}
+        logger.debug("Loaded %d existing connector doc IDs", len(self._seen_doc_ids))
 
     def _extract_attachment_text(self, att: Attachment) -> str:
         """Extract text from an attachment.
@@ -77,6 +81,11 @@ class IngestionPipeline:
                 with pdfplumber.open(io.BytesIO(att.content)) as pdf:
                     return "\n".join(page.extract_text() or "" for page in pdf.pages)
             except Exception:  # noqa: BLE001
+                logger.debug(
+                    "Attachment text extraction failed for PDF attachment: %s",
+                    att.filename,
+                    exc_info=True,
+                )
                 return ""
         if att.mime_type in ("text/plain", "text/markdown", "text/csv"):
             return att.content.decode("utf-8", errors="replace")
@@ -104,9 +113,13 @@ class IngestionPipeline:
             The total number of chunks written to the store in this call.
         """
         chunks_stored = 0
+        docs_seen = 0
+        docs_deduped = 0
 
         for doc in documents:
+            docs_seen += 1
             if doc.doc_id in self._seen_doc_ids:
+                docs_deduped += 1
                 continue
 
             # Build the parent metadata dict that will be inherited by every
@@ -198,6 +211,13 @@ class IngestionPipeline:
 
             self._seen_doc_ids.add(doc.doc_id)
 
+        logger.debug(
+            "Connector ingestion complete: "
+            "docs_seen=%d docs_deduped=%d chunks_stored=%d",
+            docs_seen,
+            docs_deduped,
+            chunks_stored,
+        )
         return chunks_stored
 
 

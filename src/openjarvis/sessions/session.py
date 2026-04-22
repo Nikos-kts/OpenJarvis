@@ -6,6 +6,7 @@ Supports consolidation and decay.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from openjarvis.core.config import DEFAULT_CONFIG_DIR
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -78,6 +81,7 @@ class SessionStore:
         self._max_age_hours = max_age_hours
         self._consolidation_threshold = consolidation_threshold
         self._create_tables()
+        logger.debug("SessionStore initialized at db path: %s", self._db_path)
 
     def _create_tables(self) -> None:
         self._conn.executescript("""
@@ -116,6 +120,7 @@ class SessionStore:
         display_name: str = "",
     ) -> Session:
         """Get existing session for user or create a new one."""
+        logger.debug("Resolving session for user_id=%s channel=%s", user_id, channel)
         row = self._conn.execute(
             "SELECT session_id, user_id, display_name,"
             " channel_ids, created_at, last_activity,"
@@ -131,6 +136,11 @@ class SessionStore:
             age_hours = (time.time() - (row[5] or 0)) / 3600
             if age_hours > self._max_age_hours:
                 # Session expired, create new
+                logger.debug(
+                    "Session expired for user_id=%s age_hours=%.2f",
+                    user_id,
+                    age_hours,
+                )
                 return self._create_session(
                     user_id,
                     channel,
@@ -185,6 +195,7 @@ class SessionStore:
             (session_id, user_id, display_name, json.dumps(channel_ids), now, now),
         )
         self._conn.commit()
+        logger.debug("Created session: session_id=%s user_id=%s", session_id, user_id)
         return Session(
             session_id=session_id,
             identity=SessionIdentity(
@@ -206,6 +217,7 @@ class SessionStore:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Persist a message to a session."""
+        logger.debug("Saving session message: session_id=%s role=%s", session_id, role)
         self._conn.execute(
             "INSERT INTO session_messages"
             " (session_id, role, content,"
@@ -232,6 +244,11 @@ class SessionStore:
             (session_id,),
         ).fetchone()[0]
         if count > self._consolidation_threshold:
+            logger.debug(
+                "Session consolidation triggered: session_id=%s count=%d",
+                session_id,
+                count,
+            )
             self.consolidate(session_id)
 
     def consolidate(self, session_id: str) -> None:
@@ -264,6 +281,11 @@ class SessionStore:
             (session_id, summary, time.time()),
         )
         self._conn.commit()
+        logger.debug(
+            "Session consolidated: session_id=%s removed=%d",
+            session_id,
+            split,
+        )
 
     def decay(self, max_age_hours: Optional[float] = None) -> int:
         """Remove sessions older than max_age_hours. Returns count removed."""
@@ -284,6 +306,7 @@ class SessionStore:
                 (sid,),
             )
         self._conn.commit()
+        logger.debug("Session decay removed count=%d", len(session_ids))
         return len(session_ids)
 
     def link_channel(self, session_id: str, channel: str, channel_user_id: str) -> None:
@@ -358,6 +381,7 @@ class SessionStore:
 
     def close(self) -> None:
         self._conn.close()
+        logger.debug("SessionStore connection closed")
 
 
 __all__ = ["Session", "SessionIdentity", "SessionMessage", "SessionStore"]

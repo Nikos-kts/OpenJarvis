@@ -16,6 +16,7 @@ Typical usage::
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS sync_state (
 """
 
 _BATCH_SIZE = 100
+
+logger = logging.getLogger(__name__)
 
 
 class SyncEngine:
@@ -71,6 +74,7 @@ class SyncEngine:
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute(_CREATE_STATE_TABLE)
         self._conn.commit()
+        logger.debug("SyncEngine initialized with state DB: %s", db_path)
 
     # ------------------------------------------------------------------
     # Public API
@@ -87,6 +91,7 @@ class SyncEngine:
         exception is re-raised so callers can handle it.
         """
         connector_id: str = connector.connector_id
+        logger.debug("Starting connector sync: connector_id=%s", connector_id)
 
         # Load any previous checkpoint so we can resume.
         checkpoint = self.get_checkpoint(connector_id)
@@ -113,6 +118,12 @@ class SyncEngine:
                 if len(batch) >= _BATCH_SIZE:
                     items_ingested += self._pipeline.ingest(batch)
                     batch = []
+                    logger.debug(
+                        "Connector sync batch checkpoint: "
+                        "connector_id=%s items_ingested=%d",
+                        connector_id,
+                        items_ingested,
+                    )
                     self._save_checkpoint(
                         connector_id,
                         prior_items + items_ingested,
@@ -124,6 +135,11 @@ class SyncEngine:
                 items_ingested += self._pipeline.ingest(batch)
 
         except Exception as exc:
+            logger.warning(
+                "Connector sync failed: connector_id=%s error=%s",
+                connector_id,
+                exc,
+            )
             self._save_checkpoint(
                 connector_id,
                 prior_items + items_ingested,
@@ -138,6 +154,11 @@ class SyncEngine:
             prior_items + items_ingested,
             cursor=current_cursor,
             error=None,
+        )
+        logger.debug(
+            "Connector sync complete: connector_id=%s items_ingested=%d",
+            connector_id,
+            items_ingested,
         )
         return items_ingested
 

@@ -44,6 +44,11 @@ def create_ws_router(event_bus: EventBus) -> Any:
             "timestamp": event.timestamp,
             "data": event.data or {},
         }
+        logger.debug(
+            "Forwarding event '%s' to %d websocket client(s)",
+            event.event_type.value,
+            len(clients),
+        )
         for ws, (queue, loop) in list(clients.items()):
             agent_filter = getattr(ws, "_agent_filter", None)
             event_agent = (event.data or {}).get("agent_id")
@@ -52,7 +57,10 @@ def create_ws_router(event_bus: EventBus) -> Any:
             try:
                 loop.call_soon_threadsafe(queue.put_nowait, payload)
             except (RuntimeError, asyncio.QueueFull):
-                pass  # Loop closed or client is slow
+                logger.debug(
+                    "Dropping websocket event '%s' for a slow/closed client",
+                    event.event_type.value,
+                )
 
     # Subscribe to all agent events
     for event_type in _AGENT_EVENTS:
@@ -64,6 +72,10 @@ def create_ws_router(event_bus: EventBus) -> Any:
         # Parse agent_id filter from query string
         agent_id = websocket.query_params.get("agent_id")
         websocket._agent_filter = agent_id  # type: ignore[attr-defined]
+        logger.info(
+            "WebSocket client connected for agent events (agent_id=%s)",
+            agent_id,
+        )
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         loop = asyncio.get_running_loop()
         clients[websocket] = (queue, loop)
@@ -72,7 +84,10 @@ def create_ws_router(event_bus: EventBus) -> Any:
                 payload = await queue.get()
                 await websocket.send_json(payload)
         except WebSocketDisconnect:
-            pass
+            logger.info(
+                "WebSocket client disconnected for agent events (agent_id=%s)",
+                agent_id,
+            )
         finally:
             clients.pop(websocket, None)
 
