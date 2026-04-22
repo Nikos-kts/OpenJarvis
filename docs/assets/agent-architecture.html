@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenJarvis — Agent Architecture Explorer</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #171923;
+            --surface-2: #1f2233;
+            --border: #2a2f42;
+            --text: #e6e8ef;
+            --muted: #9aa0b4;
+            --accent: #6aa8ff;
+            --accent-2: #ffb86a;
+            --ok: #63d8a5;
+            --warn: #ffc857;
+            --danger: #ff7a7a;
+            --code: #8be9c4;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family:
+                -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+                Cantarell, 'Helvetica Neue', sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        h1 small {
+            font-weight: 400;
+            color: var(--muted);
+            margin-left: 8px;
+            font-size: 12px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+        }
+
+        .tabs button {
+            background: var(--surface);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .tabs button.active {
+            background: var(--accent);
+            color: #0b0c14;
+            border-color: var(--accent);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 0;
+            min-height: calc(100vh - 60px);
+        }
+
+        #canvas {
+            position: relative;
+            overflow: auto;
+            background:
+                radial-gradient(circle at 20% 10%, #1a1d2c 0, transparent 40%),
+                radial-gradient(circle at 80% 90%, #16192b 0, transparent 45%),
+                var(--bg);
+        }
+
+        svg#graph {
+            display: block;
+            width: 100%;
+            min-width: 900px;
+            height: 780px;
+        }
+
+        .node rect,
+        .node path {
+            stroke: var(--border);
+            stroke-width: 1.5;
+            fill: var(--surface);
+            transition: fill 0.15s ease;
+        }
+
+        .node text {
+            font-family: inherit;
+            font-size: 12px;
+            fill: var(--text);
+            pointer-events: none;
+        }
+
+        .node.cluster rect {
+            fill: rgba(255, 255, 255, 0.015);
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-dasharray: 4 4;
+        }
+
+        .node .title {
+            font-weight: 600;
+        }
+
+        .node .subtitle {
+            fill: var(--muted);
+            font-size: 10.5px;
+        }
+
+        .node.clickable {
+            cursor: pointer;
+        }
+
+        .node.clickable:hover rect {
+            fill: var(--surface-2);
+            stroke: var(--accent);
+        }
+
+        .node.selected rect {
+            stroke: var(--accent);
+            stroke-width: 2.5;
+            fill: var(--surface-2);
+        }
+
+        .node.kind-user rect {
+            stroke: #7a8cff;
+        }
+
+        .node.kind-config rect {
+            stroke: #ffb86a;
+        }
+
+        .node.kind-agent rect {
+            stroke: #63d8a5;
+        }
+
+        .node.kind-engine rect {
+            stroke: #c084fc;
+        }
+
+        .node.kind-tool rect {
+            stroke: #f472b6;
+        }
+
+        .node.kind-llm rect {
+            stroke: #ff7a7a;
+        }
+
+        .edge {
+            fill: none;
+            stroke: var(--muted);
+            stroke-width: 1.2;
+            marker-end: url(#arrow);
+            opacity: 0.75;
+        }
+
+        .edge.highlight {
+            stroke: var(--accent);
+            stroke-width: 2;
+            opacity: 1;
+        }
+
+        .edge.alt {
+            stroke: var(--accent-2);
+            stroke-dasharray: 5 4;
+        }
+
+        .edge-label {
+            font-size: 10.5px;
+            fill: var(--muted);
+            pointer-events: none;
+        }
+
+        aside {
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            padding: 18px 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 60px);
+        }
+
+        aside h2 {
+            font-size: 14px;
+            margin: 0 0 4px 0;
+            font-weight: 600;
+        }
+
+        aside .scope {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        aside p {
+            margin: 0 0 10px 0;
+            color: var(--text);
+        }
+
+        aside .muted {
+            color: var(--muted);
+        }
+
+        aside code,
+        aside .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            background: var(--surface-2);
+            color: var(--code);
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+
+        aside ul {
+            padding-left: 18px;
+            margin: 6px 0 12px 0;
+        }
+
+        aside li {
+            margin-bottom: 4px;
+        }
+
+        aside .section {
+            margin-top: 16px;
+            border-top: 1px solid var(--border);
+            padding-top: 14px;
+        }
+
+        aside .tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: var(--surface-2);
+            color: var(--muted);
+            margin-right: 4px;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        aside .tag.py {
+            color: #ffd97a;
+        }
+
+        aside .tag.ts {
+            color: #7ab3ff;
+        }
+
+        aside .tag.sql {
+            color: #f472b6;
+        }
+
+        aside .tag.http {
+            color: #63d8a5;
+        }
+
+        aside .tag.restart {
+            color: #ff7a7a;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 11px;
+            color: var(--muted);
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .legend .swatch {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+
+        footer {
+            padding: 10px 20px;
+            font-size: 11px;
+            color: var(--muted);
+            border-top: 1px solid var(--border);
+        }
+
+        .hint {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>
+            OpenJarvis — Agent Architecture Explorer
+            <small>Click any node to see what it does, who configures it, and where it lives.</small>
+        </h1>
+        <div class="tabs" role="tablist">
+            <button data-mode="builtin" class="active">Built-in "jarvis" agent</button>
+            <button data-mode="managed">User-authored agent</button>
+            <button data-mode="compare">Both (compare)</button>
+        </div>
+    </header>
+
+    <div class="legend">
+        <span><span class="swatch" style="background: #ffb86a"></span>Config source</span>
+        <span><span class="swatch" style="background: #63d8a5"></span>Agent class</span>
+        <span><span class="swatch" style="background: #c084fc"></span>Inference engine</span>
+        <span><span class="swatch" style="background: #f472b6"></span>Tool / storage</span>
+        <span><span class="swatch" style="background: #ff7a7a"></span>LLM (Ollama, vLLM…)</span>
+        <span><span class="swatch" style="background: #7a8cff"></span>User / UI</span>
+    </div>
+
+    <main>
+        <div id="canvas">
+            <svg id="graph" viewBox="0 0 1100 780" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+                        orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa0b4" />
+                    </marker>
+                    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+                        orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#6aa8ff" />
+                    </marker>
+                </defs>
+                <g id="edges"></g>
+                <g id="nodes"></g>
+            </svg>
+        </div>
+        <aside id="panel">
+            <h2 id="panel-title">Click a node</h2>
+            <div class="scope" id="panel-scope">Hover a node to preview; click to pin details</div>
+            <div id="panel-body">
+                <p class="muted">
+                    This page visualises how a chat request flows through OpenJarvis: from
+                    config to the agent class to the LLM back-end, and how user-authored
+                    agents stored in SQLite differ from the built-in default.
+                </p>
+                <p class="muted">
+                    Switch between <strong>Built-in</strong>, <strong>User-authored</strong>,
+                    and <strong>Compare</strong> with the tabs above.
+                </p>
+            </div>
+        </aside>
+    </main>
+
+    <footer>
+        File paths are clickable in your editor: they use the same dotted-config
+        convention shown in the Settings page. Generated from the agents, engine,
+        and server modules under <code>src/openjarvis/</code>.
+    </footer>
+
+    <script>
+        // ---------------------------------------------------------------------
+        // Data model
+        // ---------------------------------------------------------------------
+
+        // Node shape:
+        //   id, title, subtitle, kind, x, y, w, h, info {...}
+        // Info:
+        //   summary (HTML), tags[], files[{path,note}], configs[{key,note}]
+
+        const NODES = {
+            user: {
+                id: 'user',
+                title: 'User',
+                subtitle: 'CLI • HTTP • UI',
+                kind: 'user',
+                x: 30,
+                y: 40,
+                w: 150,
+                h: 58,
+                info: {
+                    summary:
+                        "Request origin. Could be `jarvis chat`, an HTTP client hitting /v1/chat/completions, the desktop app, or any channel (Slack, Telegram, …).",
+                    tags: ['Any'],
+                },
+            },
+            config: {
+                id: 'config',
+                title: '.openJarvis/config.toml',
+                subtitle: '[agent] default_agent = "simple"',
+                kind: 'config',
+                x: 30,
+                y: 140,
+                w: 250,
+                h: 72,
+                info: {
+                    summary:
+                        "The source of truth for built-in agents. Hand-edited or written through the Settings UI (PATCH /v1/config). Loaded into <code>JarvisConfig</code> at startup and on every hot-reload.",
+                    tags: ['TOML', 'backend'],
+                    configs: [
+                        { key: 'agent.default_agent', note: '"simple", "orchestrator", "native_openhands", …' },
+                        { key: 'agent.tools', note: 'comma-separated tool whitelist for this agent' },
+                        { key: 'agent.system_prompt / system_prompt_path', note: 'override the packaged prompt' },
+                        { key: 'intelligence.default_model', note: 'model name passed to the engine' },
+                        { key: 'engine.default', note: '"ollama" | "vllm" | "mlx" | "llamacpp" | …' },
+                        { key: 'engine.ollama.host', note: 'e.g. http://localhost:11434' },
+                    ],
+                    files: [
+                        { path: 'src/openjarvis/core/config.py', note: 'JarvisConfig, AgentConfig, EngineConfig dataclasses' },
+                        { path: 'src/openjarvis/core/config_service.py', note: 'atomic writer + schema builder' },
+                    ],
+                },
+            },
+            builder: {
+                id: 'builder',
+                title: 'SystemBuilder',
+                subtitle: 'build() at server startup',
+                kind: 'config',
+                x: 320,
+                y: 140,
+                w: 200,
+                h: 58,
+                info: {
+                    summary:
+                        "Reads <code>config.agent.default_agent</code>, looks it up in the <code>AgentRegistry</code>, wires in the engine + tools + system prompt, and stores the instance on <code>app.state.agent</code>. This is the <em>singleton</em> 'jarvis' that answers unscoped requests.",
+                    tags: ['Python', 'backend'],
+                    files: [
+                        { path: 'src/openjarvis/system/builder.py', note: 'SystemBuilder.build()' },
+                        { path: 'src/openjarvis/server/app.py', note: 'wires app.state.agent' },
+                    ],
+                },
+            },
+            registry: {
+                id: 'registry',
+                title: 'AgentRegistry',
+                subtitle: '@register("simple") …',
+                kind: 'agent',
+                x: 570,
+                y: 140,
+                w: 200,
+                h: 58,
+                info: {
+                    summary:
+                        "Decorator-based lookup. Every concrete agent class registers itself by name; both the built-in startup path and the user-authored path go through this registry.",
+                    tags: ['Python', 'backend'],
+                    files: [
+                        { path: 'src/openjarvis/agents/_stubs.py', note: 'AgentRegistry, BaseAgent, ToolUsingAgent' },
+                        { path: 'src/openjarvis/agents/simple.py', note: 'SimpleAgent — @register("simple")' },
+                        { path: 'src/openjarvis/agents/orchestrator.py', note: 'OrchestratorAgent' },
+                        { path: 'src/openjarvis/agents/native_react.py', note: 'NativeReActAgent' },
+                        { path: 'src/openjarvis/agents/native_openhands.py', note: 'NativeOpenHandsAgent (CodeAct-style)' },
+                        { path: 'src/openjarvis/agents/deep_research.py', note: 'DeepResearchAgent' },
+                        { path: 'src/openjarvis/agents/claude_code.py', note: 'ClaudeCodeAgent' },
+                    ],
+                },
+            },
+            agent: {
+                id: 'agent',
+                title: 'Built-in "jarvis" agent instance',
+                subtitle: 'e.g. SimpleAgent / OrchestratorAgent',
+                kind: 'agent',
+                x: 570,
+                y: 260,
+                w: 280,
+                h: 72,
+                info: {
+                    summary:
+                        "A Python class instance. <strong>It is not a model</strong> — 'jarvis' is the <em>harness</em>: it assembles the prompt, decides whether to call tools, loops if needed, and hands raw messages to the engine.",
+                    tags: ['Python', 'class'],
+                    files: [
+                        { path: 'src/openjarvis/agents/_stubs.py', note: 'BaseAgent.run(), _build_messages(), _generate()' },
+                        { path: 'src/openjarvis/agents/simple.py', note: 'single-turn default' },
+                        { path: 'src/openjarvis/agents/orchestrator.py', note: 'multi-turn planner + workers' },
+                    ],
+                },
+            },
+            prompt: {
+                id: 'prompt',
+                title: 'SystemPromptBuilder',
+                subtitle: 'SOUL + MEMORY + USER + skills',
+                kind: 'tool',
+                x: 250,
+                y: 260,
+                w: 260,
+                h: 72,
+                info: {
+                    summary:
+                        "Assembles the system prompt on every turn: the agent template + <code>SOUL.md</code> (persona) + <code>MEMORY.md</code> (episodic notes) + <code>USER.md</code> (your profile) + available skills + few-shot examples. Each section is capped by <code>system_prompt.*_max_chars</code>.",
+                    tags: ['Python', 'backend'],
+                    files: [
+                        { path: 'src/openjarvis/prompt/builder.py', note: 'SystemPromptBuilder' },
+                    ],
+                    configs: [
+                        { key: 'memory_files.soul_path', note: 'persona' },
+                        { key: 'memory_files.memory_path', note: 'episodic' },
+                        { key: 'memory_files.user_path', note: 'your profile' },
+                        { key: 'system_prompt.truncation_strategy', note: 'head_tail / head / tail / smart' },
+                    ],
+                },
+            },
+            tools: {
+                id: 'tools',
+                title: 'ToolExecutor + tools',
+                subtitle: 'code_interpreter, web_search, …',
+                kind: 'tool',
+                x: 250,
+                y: 380,
+                w: 260,
+                h: 72,
+                info: {
+                    summary:
+                        "Tools the agent is allowed to call. Built-in agent gets its list from <code>config.agent.tools</code> (fallback to <code>config.tools.enabled</code>). User-authored agents get theirs from the <code>config_json['tools']</code> array in SQLite.",
+                    tags: ['Python'],
+                    files: [
+                        { path: 'src/openjarvis/agents/_stubs.py', note: 'ToolUsingAgent, ToolExecutor' },
+                        { path: 'src/openjarvis/tools/', note: 'implementations' },
+                    ],
+                    configs: [
+                        { key: 'tools.enabled', note: 'global tool whitelist' },
+                        { key: 'tools.storage.db_path', note: 'memory backend for RAG context' },
+                        { key: 'tools.mcp.servers', note: 'external MCP tool servers' },
+                    ],
+                },
+            },
+            engine: {
+                id: 'engine',
+                title: 'InferenceEngine',
+                subtitle: 'OllamaEngine / VLLMEngine / MLXEngine',
+                kind: 'engine',
+                x: 900,
+                y: 260,
+                w: 180,
+                h: 72,
+                info: {
+                    summary:
+                        "Protocol implementation that owns the HTTP client. The agent calls <code>engine.generate(messages, tools=…)</code>; the engine translates that into the back-end's native wire format and streams chunks back.",
+                    tags: ['Python', 'backend'],
+                    files: [
+                        { path: 'src/openjarvis/engine/_stubs.py', note: 'InferenceEngine protocol' },
+                        { path: 'src/openjarvis/engine/_discovery.py', note: 'get_engine(config) chooses implementation' },
+                        { path: 'src/openjarvis/engine/ollama.py', note: 'OllamaEngine — POST /api/chat' },
+                        { path: 'src/openjarvis/engine/vllm.py', note: 'VLLMEngine' },
+                        { path: 'src/openjarvis/engine/mlx.py', note: 'MLXEngine' },
+                    ],
+                    configs: [
+                        { key: 'engine.default', note: '"ollama"' },
+                        { key: 'engine.ollama.host', note: 'http://localhost:11434' },
+                    ],
+                },
+            },
+            llm: {
+                id: 'llm',
+                title: 'LLM back-end',
+                subtitle: 'Ollama • vLLM • MLX • llama.cpp',
+                kind: 'llm',
+                x: 900,
+                y: 400,
+                w: 180,
+                h: 72,
+                info: {
+                    summary:
+                        "The actual model server. OpenJarvis never embeds model weights itself — it talks to whichever runtime you've configured. Typically Ollama (<code>localhost:11434</code>) for a single-box setup.",
+                    tags: ['HTTP', 'external'],
+                },
+            },
+
+            // Entry points
+            api: {
+                id: 'api',
+                title: '/v1/chat/completions',
+                subtitle: 'FastAPI route (no agent_id)',
+                kind: 'user',
+                x: 30,
+                y: 260,
+                w: 180,
+                h: 58,
+                info: {
+                    summary:
+                        "Default chat endpoint. With no explicit agent, it dispatches to <code>app.state.agent</code> — i.e. the built-in <em>'jarvis'</em>.",
+                    tags: ['HTTP', 'backend'],
+                    files: [{ path: 'src/openjarvis/server/routes.py', note: 'chat_completions() handler' }],
+                },
+            },
+
+            // --- user-authored side ---
+            agentsUi: {
+                id: 'agentsUi',
+                title: 'Agents tab (frontend)',
+                subtitle: 'AgentsPage.tsx',
+                kind: 'user',
+                x: 30,
+                y: 480,
+                w: 200,
+                h: 58,
+                info: {
+                    summary:
+                        "React page that lists, creates, runs, pauses, and edits user-authored agents. Talks exclusively to the <code>/v1/agents/*</code> REST API.",
+                    tags: ['TypeScript', 'frontend'],
+                    files: [
+                        { path: 'frontend/src/pages/AgentsPage.tsx', note: 'page & wizard' },
+                        { path: 'frontend/src/lib/agentsApi.ts', note: 'fetchManagedAgents, runAgent, …' },
+                    ],
+                },
+            },
+            agentsRoutes: {
+                id: 'agentsRoutes',
+                title: '/v1/agents/*',
+                subtitle: 'CRUD + run/pause/resume',
+                kind: 'user',
+                x: 270,
+                y: 480,
+                w: 200,
+                h: 58,
+                info: {
+                    summary:
+                        "FastAPI router for managed agents. Create, update, delete, run, send messages, inspect traces, trigger learning.",
+                    tags: ['HTTP', 'backend'],
+                    files: [
+                        { path: 'src/openjarvis/server/agent_manager_routes.py', note: 'all /v1/agents/* endpoints' },
+                    ],
+                },
+            },
+            manager: {
+                id: 'manager',
+                title: 'AgentManager',
+                subtitle: 'SQLite CRUD layer',
+                kind: 'agent',
+                x: 510,
+                y: 480,
+                w: 180,
+                h: 58,
+                info: {
+                    summary:
+                        "Persistence layer for user-authored agents. Owns tables <code>managed_agents</code>, <code>agent_tasks</code>, <code>agent_messages</code>, <code>agent_checkpoints</code>, <code>agent_learning_log</code>, <code>channel_bindings</code>.",
+                    tags: ['Python', 'SQLite'],
+                    files: [{ path: 'src/openjarvis/agents/manager.py', note: 'AgentManager class' }],
+                    configs: [{ key: 'agent_manager.db_path', note: '.openJarvis/db/agents.db' }],
+                },
+            },
+            db: {
+                id: 'db',
+                title: 'agents.db',
+                subtitle: 'managed_agents.config_json',
+                kind: 'tool',
+                x: 730,
+                y: 480,
+                w: 180,
+                h: 58,
+                info: {
+                    summary:
+                        "SQLite file under <code>.openJarvis/db/</code>. Each row stores: <code>name</code>, <code>agent_type</code> (must match an <code>AgentRegistry</code> key), plus a <code>config_json</code> blob with <code>{model, system_prompt, temperature, max_tokens, tools, …}</code>. Also tracks status, token/cost totals, and per-agent memory.",
+                    tags: ['SQLite'],
+                },
+            },
+            executor: {
+                id: 'executor',
+                title: 'AgentExecutor',
+                subtitle: 'execute_tick(agent_id)',
+                kind: 'agent',
+                x: 510,
+                y: 580,
+                w: 180,
+                h: 58,
+                info: {
+                    summary:
+                        "Hydrates an agent row from SQLite, resolves <code>agent_type</code> via <code>AgentRegistry</code>, instantiates the same built-in class but with the user-provided model / prompt / tools, runs it, and stores the response back into <code>agent_messages</code>.",
+                    tags: ['Python', 'backend'],
+                    files: [{ path: 'src/openjarvis/agents/executor.py', note: 'AgentExecutor.execute_tick()' }],
+                },
+            },
+            bus: {
+                id: 'bus',
+                title: 'EventBus',
+                subtitle: 'turn_start / tool_call / turn_end',
+                kind: 'tool',
+                x: 900,
+                y: 140,
+                w: 180,
+                h: 58,
+                info: {
+                    summary:
+                        "In-process async pub/sub that the agent uses to stream reasoning steps, tool calls, and token usage. The server re-emits events as SSE for the UI.",
+                    tags: ['Python', 'backend'],
+                    files: [{ path: 'src/openjarvis/core/bus.py', note: 'EventBus + EventType' }],
+                },
+            },
+        };
+
+        // Edges — `from -> to`, optional label, optional `alt` (user-agent path)
+        const EDGES = [
+            { from: 'user', to: 'config', label: 'reads at startup' },
+            { from: 'config', to: 'builder', label: 'default_agent' },
+            { from: 'builder', to: 'registry', label: 'lookup' },
+            { from: 'registry', to: 'agent', label: 'instantiate' },
+            { from: 'user', to: 'api', label: 'POST' },
+            { from: 'api', to: 'agent', label: 'app.state.agent' },
+            { from: 'agent', to: 'prompt', label: 'assemble' },
+            { from: 'prompt', to: 'agent', label: 'messages[]' },
+            { from: 'agent', to: 'tools', label: 'invoke' },
+            { from: 'tools', to: 'agent', label: 'tool_result' },
+            { from: 'agent', to: 'engine', label: 'generate()' },
+            { from: 'engine', to: 'llm', label: 'HTTP' },
+            { from: 'llm', to: 'engine', label: 'tokens' },
+            { from: 'engine', to: 'agent', label: 'response' },
+            { from: 'agent', to: 'bus', label: 'emit' },
+
+            // User-authored path
+            { from: 'agentsUi', to: 'agentsRoutes', label: 'fetch', alt: true },
+            { from: 'agentsRoutes', to: 'manager', label: 'CRUD', alt: true },
+            { from: 'manager', to: 'db', label: 'SELECT/INSERT', alt: true },
+            { from: 'agentsRoutes', to: 'executor', label: 'POST /run', alt: true },
+            { from: 'executor', to: 'manager', label: 'get_agent()', alt: true },
+            { from: 'executor', to: 'registry', label: 'lookup agent_type', alt: true },
+            { from: 'executor', to: 'engine', label: 'agent.run()', alt: true },
+        ];
+
+        const MODES = {
+            builtin: {
+                label: 'Built-in "jarvis"',
+                visible: [
+                    'user',
+                    'config',
+                    'builder',
+                    'registry',
+                    'agent',
+                    'prompt',
+                    'tools',
+                    'engine',
+                    'llm',
+                    'api',
+                    'bus',
+                ],
+                highlight: [
+                    ['user', 'api'],
+                    ['api', 'agent'],
+                    ['agent', 'prompt'],
+                    ['agent', 'engine'],
+                    ['engine', 'llm'],
+                ],
+            },
+            managed: {
+                label: 'User-authored',
+                visible: [
+                    'agentsUi',
+                    'agentsRoutes',
+                    'manager',
+                    'db',
+                    'executor',
+                    'registry',
+                    'agent',
+                    'prompt',
+                    'tools',
+                    'engine',
+                    'llm',
+                ],
+                highlight: [
+                    ['agentsUi', 'agentsRoutes'],
+                    ['agentsRoutes', 'manager'],
+                    ['manager', 'db'],
+                    ['agentsRoutes', 'executor'],
+                    ['executor', 'manager'],
+                    ['executor', 'registry'],
+                    ['executor', 'engine'],
+                ],
+            },
+            compare: {
+                label: 'Both',
+                visible: Object.keys(NODES),
+                highlight: [],
+            },
+        };
+
+        // ---------------------------------------------------------------------
+        // Rendering
+        // ---------------------------------------------------------------------
+
+        const nodesLayer = document.getElementById('nodes');
+        const edgesLayer = document.getElementById('edges');
+        const panel = document.getElementById('panel-body');
+        const panelTitle = document.getElementById('panel-title');
+        const panelScope = document.getElementById('panel-scope');
+        let selectedId = null;
+        let currentMode = 'builtin';
+
+        function renderNodes(visible) {
+            nodesLayer.innerHTML = '';
+            for (const id of visible) {
+                const n = NODES[id];
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute(
+                    'class',
+                    `node clickable kind-${n.kind}${selectedId === id ? ' selected' : ''}`,
+                );
+                g.setAttribute('transform', `translate(${n.x},${n.y})`);
+                g.dataset.id = id;
+
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('width', n.w);
+                rect.setAttribute('height', n.h);
+                rect.setAttribute('rx', 8);
+                rect.setAttribute('ry', 8);
+                g.appendChild(rect);
+
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                title.setAttribute('x', 12);
+                title.setAttribute('y', 22);
+                title.setAttribute('class', 'title');
+                title.textContent = n.title;
+                g.appendChild(title);
+
+                const sub = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                sub.setAttribute('x', 12);
+                sub.setAttribute('y', 40);
+                sub.setAttribute('class', 'subtitle');
+                sub.textContent = n.subtitle;
+                g.appendChild(sub);
+
+                g.addEventListener('mouseenter', () => {
+                    if (selectedId == null) showPanel(id);
+                });
+                g.addEventListener('click', () => {
+                    selectedId = id;
+                    renderAll();
+                    showPanel(id);
+                });
+                nodesLayer.appendChild(g);
+            }
+        }
+
+        function renderEdges(visible, highlights) {
+            edgesLayer.innerHTML = '';
+            const vis = new Set(visible);
+            const hset = new Set(highlights.map((p) => p.join('->')));
+            for (const e of EDGES) {
+                if (!vis.has(e.from) || !vis.has(e.to)) continue;
+                const a = NODES[e.from];
+                const b = NODES[e.to];
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const { d, mx, my } = routeEdge(a, b);
+                path.setAttribute('d', d);
+                let cls = 'edge';
+                if (hset.has(`${e.from}->${e.to}`)) cls += ' highlight';
+                if (e.alt) cls += ' alt';
+                path.setAttribute('class', cls);
+                if (cls.includes('highlight')) path.setAttribute('marker-end', 'url(#arrow-accent)');
+                edgesLayer.appendChild(path);
+
+                if (e.label) {
+                    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    txt.setAttribute('x', mx);
+                    txt.setAttribute('y', my);
+                    txt.setAttribute('class', 'edge-label');
+                    txt.setAttribute('text-anchor', 'middle');
+                    txt.textContent = e.label;
+                    edgesLayer.appendChild(txt);
+                }
+            }
+        }
+
+        // Simple orthogonal-ish routing: exit right/left/top/bottom midpoint
+        function routeEdge(a, b) {
+            const ax = a.x + a.w / 2;
+            const ay = a.y + a.h / 2;
+            const bx = b.x + b.w / 2;
+            const by = b.y + b.h / 2;
+            // pick side based on relative position
+            const dx = bx - ax;
+            const dy = by - ay;
+            let sx, sy, ex, ey;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                sx = dx > 0 ? a.x + a.w : a.x;
+                sy = ay;
+                ex = dx > 0 ? b.x : b.x + b.w;
+                ey = by;
+            } else {
+                sx = ax;
+                sy = dy > 0 ? a.y + a.h : a.y;
+                ex = bx;
+                ey = dy > 0 ? b.y : b.y + b.h;
+            }
+            const cx = (sx + ex) / 2;
+            const d = `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ey}, ${ex} ${ey}`;
+            return { d, mx: cx, my: (sy + ey) / 2 };
+        }
+
+        function renderAll() {
+            const mode = MODES[currentMode];
+            renderEdges(mode.visible, mode.highlight);
+            renderNodes(mode.visible);
+        }
+
+        function showPanel(id) {
+            const n = NODES[id];
+            if (!n) return;
+            panelTitle.textContent = n.title;
+            panelScope.textContent = n.subtitle;
+            const info = n.info || {};
+            const tags = (info.tags || [])
+                .map((t) => {
+                    const cls = t.toLowerCase();
+                    return `<span class="tag ${cls}">${t}</span>`;
+                })
+                .join('');
+            const files = (info.files || [])
+                .map(
+                    (f) =>
+                        `<li><code>${f.path}</code>${f.note ? ` — <span class="muted">${f.note}</span>` : ''}</li>`,
+                )
+                .join('');
+            const configs = (info.configs || [])
+                .map(
+                    (c) =>
+                        `<li><code>${c.key}</code>${c.note ? ` — <span class="muted">${c.note}</span>` : ''}</li>`,
+                )
+                .join('');
+            panel.innerHTML = `
+          <div>${tags}</div>
+          <p>${info.summary || ''}</p>
+          ${configs ? `<div class="section"><strong>Config keys</strong><ul>${configs}</ul></div>` : ''}
+          ${files ? `<div class="section"><strong>Source files</strong><ul>${files}</ul></div>` : ''}
+          <p class="hint">Tip: switch tabs above to see how the request flow differs between built-in and user-authored agents.</p>
+        `;
+        }
+
+        // Tab wiring
+        document.querySelectorAll('.tabs button').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tabs button').forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMode = btn.dataset.mode;
+                selectedId = null;
+                renderAll();
+            });
+        });
+
+        renderAll();
+        // Default panel content = overview of built-in path
+        showPanel('agent');
+    </script>
+</body>
+
+</html>
