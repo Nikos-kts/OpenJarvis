@@ -460,6 +460,46 @@ def serve(
         except Exception as exc:
             logger.debug("ChannelBridge init skipped: %s", exc)
 
+    # --- Jarvis primary agent override -----------------------------------
+    # When enabled, Jarvis replaces whatever legacy-registry agent was
+    # resolved above and becomes the ``app.state.agent``.  All web chat,
+    # SSE and the /v1/jarvis/* routes talk to this single instance.
+    if config.jarvis.enabled:
+        try:
+            from types import SimpleNamespace
+
+            from openjarvis.jarvis import build_jarvis_agent
+
+            core_tools = list(getattr(agent, "_tools", []) or [])
+            # Lightweight system adapter for the delegation tool
+            system_adapter = SimpleNamespace(
+                engine=engine,
+                model=model_name,
+                bus=bus,
+                memory_backend=memory_backend,
+            )
+            jarvis = build_jarvis_agent(
+                config,
+                engine=engine,
+                model=model_name,
+                bus=bus,
+                core_tools=core_tools,
+                agent_manager=agent_manager,
+                system=system_adapter,
+                memory_backend=memory_backend,
+                channel_backend=channel_bridge,
+                scheduler=agent_scheduler,
+            )
+            if jarvis is not None:
+                agent = jarvis
+                agent_key = "jarvis"
+                console.print("  [cyan]Jarvis primary agent active[/cyan]")
+        except Exception as exc:
+            import traceback
+
+            console.print(f"[yellow]Jarvis init failed: {exc}[/yellow]")
+            traceback.print_exc()
+
     app = create_app(
         engine,
         model_name,
@@ -514,6 +554,12 @@ def serve(
         "/v1/info",
         "/v1/savings",
         "/v1/budget",
+        # Jarvis HUD polls these at ~1 Hz; don't flood the access log.
+        "/v1/jarvis/state",
+        "/v1/jarvis/delegations",
+        "/v1/jarvis/events",
+        "/v1/jarvis/skills",
+        "/v1/jarvis/stream",
     }
 
     class _AccessLogFilter(logging.Filter):

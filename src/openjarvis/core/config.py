@@ -1244,6 +1244,39 @@ class AgentManagerConfig:
 
 
 @dataclass(slots=True)
+class JarvisPersonaConfig:
+    """Primary-agent (Jarvis) persona and runtime settings.
+
+    Unrelated to :class:`AgentManagerConfig`, which governs the
+    *sub-agents* the user CRUDs through the Agents UI.  These settings
+    apply to the single built-in Jarvis instance that serves the main
+    chat and HUD.
+    """
+
+    enabled: bool = True
+    # Identity
+    name: str = "Jarvis"
+    honorific: str = "Sir"
+    # Voice defaults — actual TTS backend is resolved via `speech.*`
+    voice_id: str = "default"
+    tts_backend: str = "auto"
+    # Runtime
+    model: str = ""                 # empty = inherit intelligence.default_model
+    max_turns: int = 12
+    temperature: float = 0.5
+    max_tokens: int = 2048
+    # Delegation
+    delegation_enabled: bool = True
+    delegation_async_default: bool = False  # prefer sync unless Jarvis chooses async
+    # Storage — separate from .openJarvis/db/agents.db
+    state_db_path: str = str(DEFAULT_CONFIG_DIR / "db" / "jarvis.db")
+    # HUD
+    hud_enabled: bool = True
+    hud_theme: str = "arc-reactor-dark"  # dark cyan-on-black default
+    hud_animations: str = "heavy"        # "off" | "light" | "heavy"
+
+
+@dataclass(slots=True)
 class MemoryFilesConfig:
     """Persistent memory-file paths and nudge settings."""
 
@@ -1367,6 +1400,7 @@ class JarvisConfig:
     speech: SpeechConfig = field(default_factory=SpeechConfig)
     optimize: OptimizeConfig = field(default_factory=OptimizeConfig)
     agent_manager: AgentManagerConfig = field(default_factory=AgentManagerConfig)
+    jarvis: JarvisPersonaConfig = field(default_factory=JarvisPersonaConfig)
     memory_files: MemoryFilesConfig = field(default_factory=MemoryFilesConfig)
     system_prompt: SystemPromptConfig = field(default_factory=SystemPromptConfig)
     compression: CompressionConfig = field(default_factory=CompressionConfig)

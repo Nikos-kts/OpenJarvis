@@ -1,19 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
 import {
-  Zap,
   Activity,
-  Thermometer,
-  DollarSign,
-  TrendingDown,
   Cloud,
   HardDrive,
   Hash,
+  Thermometer,
+  TrendingDown,
   X,
-  Trophy,
-  ExternalLink,
+  Zap
 } from 'lucide-react';
-import { useAppStore } from '../../lib/store';
+import { useCallback, useEffect, useState } from 'react';
 import { getBase } from '../../lib/api';
+import { useAppStore } from '../../lib/store';
 
 interface EnergyData {
   total_energy_j?: number;
@@ -37,8 +34,6 @@ const CLOUD_PRICING = [
 export function SystemPanel() {
   const savings = useAppStore((s) => s.savings);
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
-  const optInEnabled = useAppStore((s) => s.optInEnabled);
-  const setOptInModalOpen = useAppStore((s) => s.setOptInModalOpen);
   const [energy, setEnergy] = useState<EnergyData | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetryStats | null>(null);
 
@@ -205,66 +200,6 @@ export function SystemPanel() {
           </div>
 
 
-        </section>
-
-        {/* Leaderboard / Share */}
-        <section>
-          <h4
-            className="text-[11px] font-medium uppercase tracking-wide mb-2"
-            style={{ color: 'var(--color-text-tertiary)' }}
-          >
-            Leaderboard
-          </h4>
-
-          <button
-            onClick={() => setOptInModalOpen(true)}
-            className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 transition-colors cursor-pointer"
-            style={{
-              background: optInEnabled
-                ? 'var(--color-accent-subtle)'
-                : 'var(--color-bg-secondary)',
-              border: optInEnabled
-                ? '1px solid var(--color-accent)'
-                : '1px solid var(--color-border)',
-            }}
-          >
-            <Trophy
-              size={14}
-              style={{
-                color: optInEnabled ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
-              }}
-            />
-            <span
-              className="text-xs flex-1 text-left"
-              style={{
-                color: optInEnabled ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-              }}
-            >
-              {optInEnabled ? 'Sharing Savings' : 'Share Your Savings'}
-            </span>
-            <span
-              className="text-[9px] px-1.5 py-0.5 rounded-full"
-              style={{
-                background: optInEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary, var(--color-bg-secondary))',
-                color: optInEnabled ? 'white' : 'var(--color-text-tertiary)',
-              }}
-            >
-              {optInEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-
-          <a
-            href="https://open-jarvis.github.io/OpenJarvis/leaderboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 mt-1.5 px-3 py-1.5 text-[11px] rounded-lg transition-colors"
-            style={{ color: 'var(--color-text-tertiary)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-accent)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-tertiary)')}
-          >
-            <ExternalLink size={10} />
-            View Leaderboard
-          </a>
         </section>
       </div>
     </div>

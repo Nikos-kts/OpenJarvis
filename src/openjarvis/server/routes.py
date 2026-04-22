@@ -155,13 +155,35 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
 
     if request_body.stream:
         bus = getattr(request.app.state, "bus", None)
-        # Use the agent stream bridge only when tools are present (the
-        # bridge runs agent.run() synchronously and word-splits the result,
-        # so it can't stream tokens in real-time).  For plain chat, stream
-        # directly from the engine for true token-by-token output.
-        if agent is not None and bus is not None and request_body.tools:
+        # Use the agent stream bridge whenever the configured agent can
+        # actually use tools — either because the client passed `tools` in
+        # the request or because the server-side agent was built with tools
+        # (``config.agent.tools`` / ``config.tools.enabled``).  The web
+        # chat UI never sends a ``tools`` array, so without this check the
+        # agent would be bypassed and the model would answer without ever
+        # calling web_search / memory_read / etc.  The CLI works because
+        # it invokes ``agent.run()`` in-process.
+        agent_has_tools = bool(
+            getattr(agent, "accepts_tools", False)
+            and getattr(agent, "_tools", None)
+        )
+        # Jarvis carries its own persona system prompt and must always be
+        # the one answering — never bypass it for the raw engine path or
+        # the model will respond with the generic default_system_prompt
+        # ("a helpful AI assistant…OpenJarvis…") instead of the Jarvis
+        # persona.  Detected via the `_persona` attribute on JarvisAgent.
+        is_jarvis = agent is not None and hasattr(agent, "_persona")
+        if agent is not None and bus is not None and (
+            request_body.tools or agent_has_tools or is_jarvis
+        ):
             logger.debug("Routing stream request through agent stream bridge")
-            logger.info("Routing → agent_stream (agent=%s tools=%d)", getattr(agent, 'agent_id', '?'), len(request_body.tools or []))
+            logger.info(
+                "Routing → agent_stream (agent=%s req_tools=%d agent_tools=%d jarvis=%s)",
+                getattr(agent, 'agent_id', '?'),
+                len(request_body.tools or []),
+                len(getattr(agent, "_tools", []) or []),
+                is_jarvis,
+            )
             return await _handle_agent_stream(agent, bus, model, request_body)
         logger.debug("Routing stream request through direct engine streaming")
         logger.info("Routing → stream (model=%s)", model)

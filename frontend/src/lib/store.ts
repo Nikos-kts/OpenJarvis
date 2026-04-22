@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 import type {
-  Conversation,
   ChatMessage,
+  Conversation,
   LogEntry,
-  ModelInfo,
   MessageTelemetry,
+  ModelInfo,
   SavingsData,
   ServerInfo,
   StreamState,
-  ToolCallInfo,
   TokenUsage,
+  ToolCallInfo,
 } from '../types';
 import type { ManagedAgent } from './api';
 
@@ -34,7 +34,6 @@ const OPTIN_KEY = 'openjarvis-optin';
 const OPTIN_NAME_KEY = 'openjarvis-display-name';
 const OPTIN_EMAIL_KEY = 'openjarvis-email';
 const OPTIN_ANONID_KEY = 'openjarvis-anon-id';
-const OPTIN_SEEN_KEY = 'openjarvis-optin-seen';
 
 interface ConversationStore {
   version: 1;
@@ -140,8 +139,6 @@ interface AppState {
   optInDisplayName: string;
   optInEmail: string;
   optInAnonId: string;
-  optInModalSeen: boolean;
-  optInModalOpen: boolean;
 
   // Actions: conversations
   loadConversations: () => void;
@@ -198,10 +195,13 @@ interface AppState {
   addAgentEvent: (event: AgentEvent) => void;
   clearAgentEvents: () => void;
 
+  // Voice draft — pushed by the HUD voice orb, consumed by InputArea.
+  voiceDraft: string;
+  setVoiceDraft: (text: string) => void;
+  consumeVoiceDraft: () => string;
+
   // Actions: opt-in sharing
   setOptIn: (enabled: boolean, displayName: string, email: string) => void;
-  setOptInModalOpen: (open: boolean) => void;
-  markOptInModalSeen: () => void;
 
   // Logs
   logEntries: LogEntry[];
@@ -244,8 +244,6 @@ export const useAppStore = create<AppState>((set, get) => {
     optInDisplayName: localStorage.getItem(OPTIN_NAME_KEY) || '',
     optInEmail: localStorage.getItem(OPTIN_EMAIL_KEY) || '',
     optInAnonId: localStorage.getItem(OPTIN_ANONID_KEY) || crypto.randomUUID(),
-    optInModalSeen: localStorage.getItem(OPTIN_SEEN_KEY) === 'true',
-    optInModalOpen: false,
 
     // ── Conversations ───────────────────────────────────────────────
 
@@ -449,6 +447,16 @@ export const useAppStore = create<AppState>((set, get) => {
     })),
     clearAgentEvents: () => set({ agentEvents: [] }),
 
+    // ── Voice draft (HUD orb → InputArea) ───────────────────────────
+
+    voiceDraft: '',
+    setVoiceDraft: (text: string) => set({ voiceDraft: text }),
+    consumeVoiceDraft: () => {
+      const current = get().voiceDraft;
+      if (current) set({ voiceDraft: '' });
+      return current;
+    },
+
     // ── Logs ────────────────────────────────────────────────────────
     logEntries: [],
     addLogEntry: (entry) => set((s) => ({
@@ -469,11 +477,6 @@ export const useAppStore = create<AppState>((set, get) => {
       localStorage.setItem(OPTIN_EMAIL_KEY, email);
       localStorage.setItem(OPTIN_ANONID_KEY, anonId);
       set({ optInEnabled: enabled, optInDisplayName: displayName, optInEmail: email });
-    },
-    setOptInModalOpen: (open: boolean) => set({ optInModalOpen: open }),
-    markOptInModalSeen: () => {
-      localStorage.setItem(OPTIN_SEEN_KEY, 'true');
-      set({ optInModalSeen: true });
     },
   };
 });

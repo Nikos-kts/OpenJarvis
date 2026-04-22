@@ -1,16 +1,14 @@
-import { ChatArea } from '../components/Chat/ChatArea';
-import { SystemPanel } from '../components/Chat/SystemPanel';
-import { useAppStore } from '../lib/store';
+/**
+ * ChatPage — the primary landing surface.
+ *
+ * As of the Jarvis revamp, `/` renders the `JarvisHudPage` instead of
+ * the classic chat layout.  The classic `ChatArea` + `SystemPanel` are
+ * still reachable from inside the HUD (via `ChatDock`) and remain
+ * importable if the HUD is ever feature-flagged off.
+ */
+
+import { JarvisHudPage } from '../components/hud/JarvisHudPage';
 
 export function ChatPage() {
-  const systemPanelOpen = useAppStore((s) => s.systemPanelOpen);
-
-  return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex-1 min-w-0">
-        <ChatArea />
-      </div>
-      {systemPanelOpen && <SystemPanel />}
-    </div>
-  );
+  return <JarvisHudPage />;
 }

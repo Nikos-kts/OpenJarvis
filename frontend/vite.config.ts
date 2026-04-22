@@ -1,7 +1,7 @@
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
@@ -51,8 +51,32 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/v1': process.env.VITE_API_URL || 'http://localhost:8000',
-      '/health': process.env.VITE_API_URL || 'http://localhost:8000',
+      '/v1': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        changeOrigin: true,
+        // Swallow transient socket resets (caused by uvicorn --reload
+        // restarting the worker while the HUD has in-flight polls).
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === 'ECONNRESET' || code === 'ECONNREFUSED') return;
+            // eslint-disable-next-line no-console
+            console.warn('[vite proxy /v1]', err.message);
+          });
+        },
+      },
+      '/health': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === 'ECONNRESET' || code === 'ECONNREFUSED') return;
+            // eslint-disable-next-line no-console
+            console.warn('[vite proxy /health]', err.message);
+          });
+        },
+      },
     },
   },
 });

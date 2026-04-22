@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router';
 import { CommandPalette } from './components/CommandPalette';
 import { Layout } from './components/Layout';
-import { OptInModal } from './components/OptInModal';
 import { SetupScreen } from './components/SetupScreen';
 import { Toaster } from './components/ui/sonner';
 import { fetchModels, fetchSavings, fetchServerInfo, isTauri, submitSavings } from './lib/api';
@@ -32,10 +31,6 @@ export default function App() {
   const optInDisplayName = useAppStore((s) => s.optInDisplayName);
   const optInEmail = useAppStore((s) => s.optInEmail);
   const optInAnonId = useAppStore((s) => s.optInAnonId);
-  const optInModalSeen = useAppStore((s) => s.optInModalSeen);
-  const optInModalOpen = useAppStore((s) => s.optInModalOpen);
-  const setOptInModalOpen = useAppStore((s) => s.setOptInModalOpen);
-  const markOptInModalSeen = useAppStore((s) => s.markOptInModalSeen);
   const savings = useAppStore((s) => s.savings);
 
   // Apply theme class to <html>
@@ -109,14 +104,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [optInEnabled, optInDisplayName, optInAnonId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show opt-in modal on first visit
-  useEffect(() => {
-    if (!optInModalSeen) {
-      setOptInModalOpen(true);
-      markOptInModalSeen();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
 
   // Global keyboard shortcuts
@@ -183,9 +170,6 @@ export default function App() {
       </Routes>
       <Toaster position="bottom-right" />
       {commandPaletteOpen && <CommandPalette />}
-      {optInModalOpen && (
-        <OptInModal onClose={() => setOptInModalOpen(false)} />
-      )}
     </>
   );
 }

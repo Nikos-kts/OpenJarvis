@@ -253,6 +253,12 @@ def create_app(
     app.include_router(create_connectors_router())
     app.include_router(create_digest_router())
     app.include_router(upload_router)
+    try:
+        from openjarvis.jarvis.routes import router as jarvis_router
+
+        app.include_router(jarvis_router)
+    except Exception as exc:
+        logger.warning("Failed to mount /v1/jarvis router: %s", exc)
     include_all_routes(app)
 
     # Restore SendBlue channel bindings from database on startup

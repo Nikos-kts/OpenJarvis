@@ -432,6 +432,84 @@ export const FIELD_HINTS: Record<string, FieldHint> = {
             'boots. Leave empty to activate operators manually via the CLI or API.',
         scope: 'Backend (Python)',
     },
+
+    // -------------------------------------------------------------------
+    // Jarvis — primary singleton agent
+    // -------------------------------------------------------------------
+    'jarvis.enabled': {
+        text:
+            'Activate the Jarvis primary agent.  When on, Jarvis replaces the ' +
+            'default chat agent at `app.state.agent` and the HUD is served at /.',
+        scope: 'Backend (Python). Restart required.',
+    },
+    'jarvis.name': {
+        text: 'Display name used in the system prompt and HUD (default: "Jarvis").',
+        scope: 'Backend (Python). Reload persona to apply.',
+    },
+    'jarvis.honorific': {
+        text:
+            'How Jarvis addresses the user ("Sir", "Madam", a first name, …). ' +
+            'Injected into the persona prompt.',
+        scope: 'Backend (Python). Reload persona to apply.',
+    },
+    'jarvis.voice_id': {
+        text: 'TTS voice identifier to use when the voice orb speaks replies.',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.tts_backend': {
+        text: 'TTS backend: "auto", "system", "kokoro", or "none" to disable speech.',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.model': {
+        text:
+            'Override the inference model Jarvis uses.  Leave blank to inherit ' +
+            '`agent.default_model`.',
+        scope: 'Backend (Python). Restart required.',
+    },
+    'jarvis.max_turns': {
+        text:
+            'Maximum tool-calling iterations Jarvis takes inside one user turn. ' +
+            'Higher = more thorough, slower, more tokens.',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.temperature': {
+        text: 'Sampling temperature for Jarvis (0.0–1.5).',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.max_tokens': {
+        text: 'Maximum tokens Jarvis may emit in one response.',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.delegation_enabled': {
+        text:
+            'Expose the `delegate_to_subagent` tool to Jarvis so it can hand ' +
+            'briefs off to managed sub-agents.',
+        scope: 'Backend (Python). Restart required.',
+    },
+    'jarvis.delegation_async_default': {
+        text:
+            'Default delegation mode when Jarvis does not specify one: `true` ' +
+            'for async (fire-and-forget with streaming updates), `false` for sync.',
+        scope: 'Backend (Python)',
+    },
+    'jarvis.state_db_path': {
+        text:
+            'SQLite file for Jarvis runtime state (metrics, delegations, event ' +
+            'trace).  Separate from the sub-agent DB.',
+        scope: 'Backend (Python). Restart required.',
+    },
+    'jarvis.hud_enabled': {
+        text: 'Serve the HUD at / instead of the classic chat surface.',
+        scope: 'Frontend',
+    },
+    'jarvis.hud_theme': {
+        text: 'HUD color theme identifier (e.g. "arc-reactor-dark").',
+        scope: 'Frontend',
+    },
+    'jarvis.hud_animations': {
+        text: 'HUD animation intensity: "off", "light", or "heavy".',
+        scope: 'Frontend',
+    },
 };
 
 export function getFieldHint(dotted: string): FieldHint | undefined {

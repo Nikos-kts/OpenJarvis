@@ -1,5 +1,5 @@
+import { CheckCircle2, ChevronDown, ChevronRight, Loader2, XCircle } from 'lucide-react';
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import type { ToolCallInfo } from '../../types';
 
 interface Props {
@@ -12,10 +12,14 @@ const statusConfig = {
   error: { icon: XCircle, color: 'var(--color-error)' },
 };
 
-function previewArgs(raw: string): string {
-  if (!raw) return '';
+function previewArgs(raw: unknown): string {
+  if (raw == null) return '';
+  // Defensive: backend tool executor publishes args as a dict, not a JSON
+  // string. Coerce to a string before any further processing.
+  const str = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  if (!str) return '';
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
       const entries = Object.entries(parsed);
       if (entries.length === 0) return '';
@@ -28,7 +32,7 @@ function previewArgs(raw: string): string {
   } catch {
     /* fall through */
   }
-  return raw.length > 60 ? `${raw.slice(0, 60)}…` : raw;
+  return str.length > 60 ? `${str.slice(0, 60)}…` : str;
 }
 
 export function ToolCallCard({ toolCall }: Props) {
@@ -159,10 +163,12 @@ export function ToolCallCard({ toolCall }: Props) {
   );
 }
 
-function formatJson(raw: string): string {
+function formatJson(raw: unknown): string {
+  if (raw == null) return '';
+  const str = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
   try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
+    return JSON.stringify(JSON.parse(str), null, 2);
   } catch {
-    return raw;
+    return str;
   }
 }

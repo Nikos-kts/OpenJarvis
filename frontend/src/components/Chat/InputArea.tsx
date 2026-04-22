@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Square, Paperclip } from 'lucide-react';
-import { useAppStore, generateId } from '../../lib/store';
-import { streamChat } from '../../lib/sse';
-import { fetchSavings, getBase } from '../../lib/api';
-import { MicButton } from './MicButton';
+import { Send, Square } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSpeech } from '../../hooks/useSpeech';
-import type { ChatMessage, ToolCallInfo, TokenUsage, MessageTelemetry } from '../../types';
+import { fetchSavings, getBase } from '../../lib/api';
+import { streamChat } from '../../lib/sse';
+import { generateId, useAppStore } from '../../lib/store';
+import type { ChatMessage, MessageTelemetry, TokenUsage, ToolCallInfo } from '../../types';
+import { MicButton } from './MicButton';
 
 export function InputArea() {
   const [input, setInput] = useState('');
@@ -26,6 +26,15 @@ export function InputArea() {
   const setStreamState = useAppStore((s) => s.setStreamState);
   const resetStream = useAppStore((s) => s.resetStream);
   const modelLoading = useAppStore((s) => s.modelLoading);
+
+  // HUD voice orb pushes transcripts into `voiceDraft`; consume them here.
+  const voiceDraft = useAppStore((s) => s.voiceDraft);
+  const consumeVoiceDraft = useAppStore((s) => s.consumeVoiceDraft);
+  useEffect(() => {
+    if (!voiceDraft) return;
+    const text = consumeVoiceDraft();
+    if (text) setInput((prev) => (prev ? prev + ' ' + text : text));
+  }, [voiceDraft, consumeVoiceDraft]);
 
   const { state: speechState, available: speechAvailable, startRecording, stopRecording } = useSpeech();
 
@@ -48,9 +57,9 @@ export function InputArea() {
   const micDisabled = !speechEnabled || !speechAvailable || streamState.isStreaming;
   const micReason: 'not-enabled' | 'no-backend' | 'streaming' | undefined =
     !speechEnabled ? 'not-enabled'
-    : !speechAvailable ? 'no-backend'
-    : streamState.isStreaming ? 'streaming'
-    : undefined;
+      : !speechAvailable ? 'no-backend'
+        : streamState.isStreaming ? 'streaming'
+          : undefined;
 
   const handleMicClick = useCallback(async () => {
     if (speechState === 'recording') {
@@ -166,10 +175,21 @@ export function InputArea() {
         } else if (eventName === 'tool_call_start') {
           try {
             const data = JSON.parse(sseEvent.data);
+            // The backend tool executor emits `arguments` as a dict, while
+            // raw OpenAI tool_call deltas emit it as a JSON string. Coerce
+            // to a string so ToolCallCard (and the React tree) can render
+            // it without "Objects are not valid as a React child" errors.
+            const rawArgs = data.arguments;
+            const argsStr =
+              rawArgs == null
+                ? ''
+                : typeof rawArgs === 'string'
+                  ? rawArgs
+                  : JSON.stringify(rawArgs);
             const tc: ToolCallInfo = {
               id: generateId(),
               tool: data.tool,
-              arguments: data.arguments || '',
+              arguments: argsStr,
               status: 'running',
             };
             toolCalls.push(tc);
@@ -180,9 +200,9 @@ export function InputArea() {
             updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
             useAppStore.getState().addLogEntry({
               timestamp: Date.now(), level: 'info', category: 'tool',
-              message: `Calling ${data.tool}(${data.arguments || ''})`,
+              message: `Calling ${data.tool}(${argsStr})`,
             });
-          } catch {}
+          } catch { }
         } else if (eventName === 'tool_call_end') {
           try {
             const data = JSON.parse(sseEvent.data);
@@ -192,14 +212,20 @@ export function InputArea() {
             if (tc) {
               tc.status = data.success ? 'success' : 'error';
               tc.latency = data.latency;
-              tc.result = data.result;
+              const rawResult = data.result;
+              tc.result =
+                rawResult == null
+                  ? undefined
+                  : typeof rawResult === 'string'
+                    ? rawResult
+                    : JSON.stringify(rawResult);
             }
             setStreamState({
               phase: 'Generating...',
               activeToolCalls: [...toolCalls],
             });
             updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
-          } catch {}
+          } catch { }
         } else {
           try {
             const data = JSON.parse(sseEvent.data);
@@ -222,7 +248,7 @@ export function InputArea() {
               }
             }
             if (data.choices?.[0]?.finish_reason === 'stop') break;
-          } catch {}
+          } catch { }
         }
       }
     } catch (err: any) {
@@ -292,7 +318,7 @@ export function InputArea() {
 
       fetchSavings()
         .then((data) => useAppStore.getState().setSavings(data))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [
     input,
