@@ -148,7 +148,6 @@ class TestSchema:
             "server",
             "security",
             "channel",
-            "speech",
             "telemetry",
             "traces",
         ):

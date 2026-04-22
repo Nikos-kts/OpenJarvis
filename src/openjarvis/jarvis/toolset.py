@@ -134,8 +134,6 @@ def build_jarvis_tools(
         "openjarvis.tools.git_tool",
         "openjarvis.tools.image_tool",
         "openjarvis.tools.pdf_tool",
-        "openjarvis.tools.audio_tool",
-        "openjarvis.tools.text_to_speech",
         "openjarvis.tools.memory_manage",
         "openjarvis.tools.skill_manage",
         "openjarvis.tools.user_profile_manage",

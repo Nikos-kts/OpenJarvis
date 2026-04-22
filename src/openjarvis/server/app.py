@@ -6,7 +6,7 @@ import logging
 import pathlib
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -150,7 +150,6 @@ def create_app(
     channel_bridge=None,
     config=None,
     memory_backend=None,
-    speech_backend=None,
     agent_manager=None,
     agent_scheduler=None,
     api_key: str = "",
@@ -211,7 +210,6 @@ def create_app(
     app.state.channel_bridge = channel_bridge
     app.state.config = config
     app.state.memory_backend = memory_backend
-    app.state.speech_backend = speech_backend
     app.state.agent_manager = agent_manager
     app.state.agent_scheduler = agent_scheduler
     app.state.session_start = time.time()

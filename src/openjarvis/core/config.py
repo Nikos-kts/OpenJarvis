@@ -1211,17 +1211,6 @@ class OperatorsConfig:
 
 
 @dataclass(slots=True)
-class SpeechConfig:
-    """Speech-to-text settings."""
-
-    backend: str = "auto"  # "auto", "faster-whisper", "openai", "deepgram"
-    model: str = "base"  # Whisper model size: tiny, base, small, medium, large-v3
-    language: str = ""  # Empty = auto-detect
-    device: str = "auto"  # "auto", "cpu", "cuda"
-    compute_type: str = "float16"  # "float16", "int8", "float32"
-
-
-@dataclass(slots=True)
 class OptimizeConfig:
     """Configuration optimization settings."""
 
@@ -1257,9 +1246,6 @@ class JarvisPersonaConfig:
     # Identity
     name: str = "Jarvis"
     honorific: str = "Sir"
-    # Voice defaults — actual TTS backend is resolved via `speech.*`
-    voice_id: str = "default"
-    tts_backend: str = "auto"
     # Runtime
     model: str = ""                 # empty = inherit intelligence.default_model
     max_turns: int = 12
@@ -1357,9 +1343,6 @@ class DigestConfig:
         default_factory=lambda: ["github", "financial", "music", "fitness"]
     )
     honorific: str = "sir"
-    voice_id: str = ""
-    voice_speed: float = 1.0
-    tts_backend: str = "cartesia"
     messages: DigestSectionConfig = field(
         default_factory=lambda: DigestSectionConfig(
             sources=["gmail", "slack", "google_tasks"]
@@ -1397,7 +1380,6 @@ class JarvisConfig:
     sessions: SessionConfig = field(default_factory=SessionConfig)
     a2a: A2AConfig = field(default_factory=A2AConfig)
     operators: OperatorsConfig = field(default_factory=OperatorsConfig)
-    speech: SpeechConfig = field(default_factory=SpeechConfig)
     optimize: OptimizeConfig = field(default_factory=OptimizeConfig)
     agent_manager: AgentManagerConfig = field(default_factory=AgentManagerConfig)
     jarvis: JarvisPersonaConfig = field(default_factory=JarvisPersonaConfig)
@@ -1612,7 +1594,6 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
             "sessions",
             "a2a",
             "operators",
-            "speech",
             "optimize",
             "agent_manager",
             "digest",
@@ -1942,7 +1923,6 @@ __all__ = [
     "SessionConfig",
     "SignalChannelConfig",
     "SlackChannelConfig",
-    "SpeechConfig",
     "StorageConfig",
     "TeamsChannelConfig",
     "TelegramChannelConfig",

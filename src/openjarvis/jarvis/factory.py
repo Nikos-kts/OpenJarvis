@@ -79,8 +79,6 @@ def build_jarvis_agent(
     persona = JarvisPersona(
         name=jc.name,
         honorific=jc.honorific,
-        voice_id=jc.voice_id,
-        tts_backend=jc.tts_backend,
         soul_path=Path(config.memory_files.soul_path),
         memory_path=Path(config.memory_files.memory_path),
         user_path=Path(config.memory_files.user_path),

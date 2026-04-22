@@ -308,17 +308,6 @@ def serve(
         )
         _wire_system.wire_channel(channel_bridge)
 
-    # Set up speech backend
-    speech_backend = None
-    try:
-        from openjarvis.speech._discovery import get_speech_backend
-
-        speech_backend = get_speech_backend(config)
-        if speech_backend:
-            console.print(f"  Speech: [cyan]{speech_backend.backend_id}[/cyan]")
-    except Exception as exc:
-        logger.debug("Speech backend discovery failed: %s", exc)
-
     # Create app
     from openjarvis.server.app import create_app
 
@@ -510,7 +499,6 @@ def serve(
         channel_bridge=channel_bridge,
         config=config,
         memory_backend=memory_backend,
-        speech_backend=speech_backend,
         agent_manager=agent_manager,
         agent_scheduler=agent_scheduler,
         api_key=api_key,

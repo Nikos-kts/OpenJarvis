@@ -344,17 +344,6 @@ def _handle_agent(
         total_tokens=result.metadata.get("total_tokens", 0),
     )
 
-    # Include audio metadata if the agent produced audio (e.g. morning digest)
-    audio_meta = None
-    audio_path = result.metadata.get("audio_path", "")
-    if audio_path:
-        from pathlib import Path
-
-        from openjarvis.server.models import AudioMeta
-
-        if Path(audio_path).exists():
-            audio_meta = AudioMeta(url="/api/digest/audio")
-
     return ChatCompletionResponse(
         model=model,
         choices=[
@@ -362,7 +351,6 @@ def _handle_agent(
                 message=ChoiceMessage(
                     role="assistant",
                     content=result.content,
-                    audio=audio_meta,
                 ),
                 finish_reason="stop",
             )

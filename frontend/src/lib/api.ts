@@ -234,58 +234,6 @@ export async function fetchTraces(limit: number = 50): Promise<unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Speech
-// ---------------------------------------------------------------------------
-
-export interface TranscriptionResult {
-  text: string;
-  language: string | null;
-  confidence: number | null;
-  duration_seconds: number;
-}
-
-export interface SpeechHealth {
-  available: boolean;
-  backend?: string;
-  reason?: string;
-}
-
-export async function transcribeAudio(audioBlob: Blob, filename = 'recording.webm'): Promise<TranscriptionResult> {
-  if (isTauri()) {
-    try {
-      const buffer = await audioBlob.arrayBuffer();
-      return await tauriInvoke<TranscriptionResult>('transcribe_audio', {
-        audioData: Array.from(new Uint8Array(buffer)),
-        filename,
-      });
-    } catch {
-      // Fall through to fetch
-    }
-  }
-  const formData = new FormData();
-  formData.append('file', audioBlob, filename);
-  const res = await fetch(`${getBase()}/v1/speech/transcribe`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchSpeechHealth(): Promise<SpeechHealth> {
-  if (isTauri()) {
-    try {
-      return await tauriInvoke<SpeechHealth>('speech_health');
-    } catch {
-      return { available: false };
-    }
-  }
-  const res = await fetch(`${getBase()}/v1/speech/health`);
-  if (!res.ok) return { available: false };
-  return res.json();
-}
-
-// ---------------------------------------------------------------------------
 // Agent Manager
 // ---------------------------------------------------------------------------
 

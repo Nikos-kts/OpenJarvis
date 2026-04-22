@@ -20,7 +20,6 @@ def _load_registry_map() -> tuple[dict[str, object], dict[str, object]]:
         ModelRegistry,
         RouterPolicyRegistry,
         SkillRegistry,
-        SpeechRegistry,
         ToolRegistry,
     )
 
@@ -35,7 +34,6 @@ def _load_registry_map() -> tuple[dict[str, object], dict[str, object]]:
         "SkillRegistry": SkillRegistry,
         "BenchmarkRegistry": BenchmarkRegistry,
         "RouterPolicyRegistry": RouterPolicyRegistry,
-        "SpeechRegistry": SpeechRegistry,
         "CompressionRegistry": CompressionRegistry,
     }
 
@@ -51,7 +49,6 @@ def _load_registry_map() -> tuple[dict[str, object], dict[str, object]]:
         "SkillRegistry": ("skill", "skills"),
         "BenchmarkRegistry": ("benchmark", "benchmarks"),
         "RouterPolicyRegistry": ("router", "routers"),
-        "SpeechRegistry": ("speech", "speeches"),
         "CompressionRegistry": ("compression", "compressions"),
     }
     for class_name, cls in by_name.items():

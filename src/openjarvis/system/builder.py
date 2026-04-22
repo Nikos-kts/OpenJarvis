@@ -43,7 +43,6 @@ class SystemBuilder:
         self._scheduler: Optional[bool] = None
         self._workflow: Optional[bool] = None
         self._sessions: Optional[bool] = None
-        self._speech: Optional[bool] = None
         self._mcp_clients: List = []
 
     def engine(self, key: str) -> SystemBuilder:
@@ -84,10 +83,6 @@ class SystemBuilder:
 
     def sessions(self, enabled: bool) -> SystemBuilder:
         self._sessions = enabled
-        return self
-
-    def speech(self, enabled: bool) -> SystemBuilder:
-        self._speech = enabled
         return self
 
     def event_bus(self, bus: EventBus) -> SystemBuilder:
@@ -258,16 +253,6 @@ class SystemBuilder:
             except Exception:
                 logger.warning("Failed to initialize agent scheduler", exc_info=True)
 
-        speech_backend = None
-        speech_enabled = self._speech if self._speech is not None else True
-        if speech_enabled:
-            try:
-                from openjarvis.speech._discovery import get_speech_backend
-
-                speech_backend = get_speech_backend(config)
-            except Exception as exc:
-                logger.warning("Failed to initialize speech backend: %s", exc)
-
         system = JarvisSystem(
             config=config,
             bus=bus,
@@ -292,7 +277,6 @@ class SystemBuilder:
             agent_manager=agent_manager,
             agent_scheduler=agent_scheduler,
             agent_executor=agent_executor,
-            speech_backend=speech_backend,
             skill_manager=skill_manager,
         )
         system._learning_orchestrator = learning_orchestrator
