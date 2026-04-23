@@ -160,38 +160,52 @@ export const FIELD_HINTS: Record<string, FieldHint> = {
     },
 
     // -------------------------------------------------------------------
-    // Speech
+    // Speech Settings (Gemini Live voice pipeline)
     // -------------------------------------------------------------------
-    'speech.backend': {
+    'speech.enabled': {
         text:
-            "'auto' picks the best local install. 'faster-whisper' = local STT " +
-            "(GPU or CPU). 'openai' and 'deepgram' are cloud; they require API " +
-            "keys set in [security.credentials] or env vars.",
-        scope: 'Backend (Python) — Rust fast-path for mic capture',
+            'Master toggle for the voice pipeline. When off, all speech ' +
+            'capture and synthesis is disabled.',
+        scope: 'Backend (Python)',
     },
-    'speech.model': {
+    'speech.provider': {
         text:
-            "Whisper model size. tiny < base < small < medium < large-v3. Bigger " +
-            "= more accurate but much slower. Ignored for cloud backends.",
+            "Voice provider. Only 'gemini' (Gemini Live) is supported now; " +
+            'Deepgram and a local privacy-first tier are planned for Phase 4.',
+        scope: 'Backend (Python)',
+    },
+    'speech.gemini_api_key': {
+        text:
+            'Google AI API key used for Gemini Live. Create one at ' +
+            'https://aistudio.google.com/app/apikey. Stored locally in ' +
+            'config.toml — never sent over HTTP.',
+        scope: 'Backend (Python) — stored in config.toml',
+    },
+    'speech.gemini_model': {
+        text:
+            'Gemini Live model to use for real-time voice conversations. ' +
+            "'gemini-live-2.5-flash-preview' is the latest recommended model.",
         scope: 'Backend (Python)',
     },
     'speech.language': {
         text:
-            "ISO language code (e.g. 'en', 'el'). Empty = auto-detect per " +
-            "utterance — slightly slower but works across languages.",
+            'Language of your voice input. Currently English (en-US), ' +
+            'Greek (el-GR), and Spanish (es-ES) are supported. Used as ' +
+            'a hint to the Gemini Live API.',
         scope: 'Backend (Python)',
     },
-    'speech.device': {
+    'speech.vad_threshold': {
         text:
-            "'auto' picks cuda if a compatible GPU is detected, else cpu. 'cuda' " +
-            "requires an NVIDIA GPU with the proper drivers; 'cpu' always works.",
-        scope: 'Backend (Python)',
+            'Voice Activity Detection sensitivity (0.0–1.0). Higher values ' +
+            'require louder audio to trigger listening; lower values are more ' +
+            'sensitive. Default 0.5 works well in quiet environments.',
+        scope: 'Backend (Rust audio daemon)',
     },
-    'speech.compute_type': {
+    'speech.sample_rate': {
         text:
-            "Precision used by faster-whisper. 'float16' = fastest on GPU, " +
-            "'int8' = smallest CPU footprint, 'float32' = highest quality.",
-        scope: 'Backend (Python)',
+            'Audio capture sample rate in Hz passed to the Rust audio daemon. ' +
+            '16000 Hz is the standard for speech recognition.',
+        scope: 'Backend (Rust audio daemon)',
     },
 
     // -------------------------------------------------------------------
@@ -259,22 +273,6 @@ export const FIELD_HINTS: Record<string, FieldHint> = {
         text:
             "How the digest addresses you in its opening line ('sir', 'madam', " +
             "or your first name).",
-        scope: 'Backend (Python)',
-    },
-    'digest.voice_id': {
-        text:
-            'TTS voice identifier (Cartesia or ElevenLabs voice ID). Empty = the ' +
-            "persona's default voice.",
-        scope: 'Backend (Python)',
-    },
-    'digest.voice_speed': {
-        text: 'Playback-rate multiplier for the generated audio. 1.0 = normal.',
-        scope: 'Backend (Python)',
-    },
-    'digest.tts_backend': {
-        text:
-            "Text-to-speech provider: 'cartesia' (recommended), 'elevenlabs', or " +
-            "'openai'. Each requires its API key in [security.credentials].",
         scope: 'Backend (Python)',
     },
     'digest.messages.sources': {
@@ -451,14 +449,6 @@ export const FIELD_HINTS: Record<string, FieldHint> = {
             'How Jarvis addresses the user ("Sir", "Madam", a first name, …). ' +
             'Injected into the persona prompt.',
         scope: 'Backend (Python). Reload persona to apply.',
-    },
-    'jarvis.voice_id': {
-        text: 'TTS voice identifier to use when the voice orb speaks replies.',
-        scope: 'Backend (Python)',
-    },
-    'jarvis.tts_backend': {
-        text: 'TTS backend: "auto", "system", "kokoro", or "none" to disable speech.',
-        scope: 'Backend (Python)',
     },
     'jarvis.model': {
         text:

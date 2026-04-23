@@ -61,8 +61,6 @@ EXPECTED_TOOLS = {
     "pdf_extract",
     # image_tool.py
     "image_generate",
-    # audio_tool.py
-    "audio_transcribe",
     # knowledge_tools.py
     "kg_add_entity",
     "kg_add_relation",

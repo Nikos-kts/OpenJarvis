@@ -1009,36 +1009,6 @@ async fn fetch_savings(api_url: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {}", e))
 }
 
-/// Transcribe audio via the speech API endpoint.
-#[tauri::command]
-async fn transcribe_audio(
-    api_url: String,
-    audio_data: Vec<u8>,
-    filename: String,
-) -> Result<serde_json::Value, String> {
-    let url = format!("{}/v1/speech/transcribe", api_url);
-    let client = reqwest::Client::new();
-
-    let part = reqwest::multipart::Part::bytes(audio_data)
-        .file_name(filename)
-        .mime_str("audio/webm")
-        .map_err(|e| format!("Failed to create multipart: {}", e))?;
-
-    let form = reqwest::multipart::Form::new().part("file", part);
-
-    let resp = client
-        .post(&url)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {}", e))?;
-    Ok(body)
-}
-
 /// Submit savings to Supabase leaderboard.
 #[tauri::command]
 async fn submit_savings(
@@ -1179,20 +1149,6 @@ async fn delete_ollama_model(model_name: String) -> Result<serde_json::Value, St
         return Err(format!("Delete returned status {}", resp.status()));
     }
     Ok(serde_json::json!({"status": "deleted", "model": model_name}))
-}
-
-/// Check speech backend health.
-#[tauri::command]
-async fn speech_health(api_url: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/v1/speech/health", api_url);
-    let resp = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {}", e))?;
-    Ok(body)
 }
 
 // ---------------------------------------------------------------------------
@@ -1698,8 +1654,6 @@ pub fn run() {
             run_jarvis_command,
             fetch_savings,
             submit_savings,
-            transcribe_audio,
-            speech_health,
             pull_ollama_model,
             delete_ollama_model,
             save_cloud_key,

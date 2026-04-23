@@ -34,14 +34,6 @@ def test_morning_digest_run(tmp_path):
         metadata={"total_items": 2},
     )
 
-    # Mock TTS result
-    mock_tts_result = ToolResult(
-        tool_name="text_to_speech",
-        content=str(tmp_path / "digest.mp3"),
-        success=True,
-        metadata={"audio_path": str(tmp_path / "digest.mp3")},
-    )
-
     agent = MorningDigestAgent(
         mock_engine,
         "test-model",
@@ -53,14 +45,14 @@ def test_morning_digest_run(tmp_path):
     with patch.object(
         agent._executor,
         "execute",
-        side_effect=[mock_collect_result, mock_tts_result],
+        side_effect=[mock_collect_result],
     ):
         result = agent.run("Generate morning digest")
 
     assert isinstance(result, AgentResult)
     assert "Good morning" in result.content
     assert result.turns == 1
-    assert len(result.tool_results) == 2
+    assert len(result.tool_results) == 1
 
 
 def test_load_persona():

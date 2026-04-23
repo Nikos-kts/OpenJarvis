@@ -82,6 +82,18 @@ class EventType(str, Enum):
     FEEDBACK_RECEIVED = "feedback_received"
     # Phase 26 — Runtime configuration
     CONFIG_UPDATED = "config_updated"
+    # Phase 4 — Voice pipeline
+    VOICE_SESSION_START = "voice_session_start"
+    VOICE_SESSION_END = "voice_session_end"
+    VOICE_PROVIDER_SWITCH = "voice_provider_switch"
+    VOICE_VAD_SPEECH_START = "voice_vad_speech_start"
+    VOICE_VAD_SPEECH_END = "voice_vad_speech_end"
+    VOICE_USER_INTERRUPT = "voice_user_interrupt"
+    VOICE_TTS_START = "voice_tts_start"
+    VOICE_TTS_END = "voice_tts_end"
+    VOICE_TRANSCRIPT_PARTIAL = "voice_transcript_partial"
+    VOICE_TRANSCRIPT_FINAL = "voice_transcript_final"
+    VOICE_ERROR = "voice_error"
 
 
 @dataclass(slots=True)

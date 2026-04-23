@@ -69,7 +69,6 @@ export interface ChatMessage {
   toolCalls?: ToolCallInfo[];
   usage?: TokenUsage;
   telemetry?: MessageTelemetry;
-  audio?: { url: string };
 }
 
 export interface Conversation {

@@ -137,16 +137,8 @@ class SkillRegistry(RegistryBase[Any]):
     """Registry for skill manifests."""
 
 
-class SpeechRegistry(RegistryBase[Any]):
-    """Registry for speech backend implementations."""
-
-
 class CompressionRegistry(RegistryBase[Any]):
     """Registry for context compression strategies."""
-
-
-class TTSRegistry(RegistryBase[Any]):
-    """Registry for text-to-speech backend implementations."""
 
 
 class ConnectorRegistry(RegistryBase[Any]):
@@ -166,7 +158,5 @@ __all__ = [
     "RegistryBase",
     "RouterPolicyRegistry",
     "SkillRegistry",
-    "SpeechRegistry",
-    "TTSRegistry",
     "ToolRegistry",
 ]

@@ -34,12 +34,20 @@ export interface ConfigFieldSchema {
   secret?: boolean;
   advanced?: boolean;
   restart_required?: boolean;
+  enum?: string[];
   properties?: Record<string, ConfigFieldSchema>;
 }
 
 export interface ConfigSectionSchema {
   title: string;
   readonly?: boolean;
+  /**
+   * Name of a boolean field in `properties` that acts as a master on/off
+   * switch for the whole section.  When set, the UI hoists this field to
+   * a prominent card at the top and disables the rest of the form while
+   * it is `false`.
+   */
+  master_toggle?: string;
   properties: Record<string, ConfigFieldSchema>;
 }
 

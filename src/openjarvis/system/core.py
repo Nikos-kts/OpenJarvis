@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from openjarvis.security.capabilities import CapabilityPolicy
     from openjarvis.sessions.session import SessionStore
     from openjarvis.skills.manager import SkillManager
-    from openjarvis.speech._stubs import SpeechBackend
     from openjarvis.system.orchestrator import QueryOrchestrator
     from openjarvis.telemetry.gpu_monitor import GpuMonitor
     from openjarvis.telemetry.store import TelemetryStore
@@ -82,7 +81,6 @@ class JarvisSystem:
     agent_manager: Optional[AgentManager] = None
     agent_scheduler: Optional[AgentScheduler] = None
     agent_executor: Optional[AgentExecutor] = None
-    speech_backend: Optional[SpeechBackend] = None
     skill_manager: Optional[SkillManager] = None
     _learning_orchestrator: Optional[LearningOrchestrator] = None
     _mcp_clients: List[MCPClient] = field(default_factory=list)

@@ -755,51 +755,6 @@ async def learning_policy(request: Request):
     return result
 
 
-# ---- Speech routes ----
-
-speech_router = APIRouter(prefix="/v1/speech", tags=["speech"])
-
-
-@speech_router.post("/transcribe")
-async def transcribe_speech(request: Request):
-    """Transcribe uploaded audio to text."""
-    backend = getattr(request.app.state, "speech_backend", None)
-    if backend is None:
-        raise HTTPException(status_code=501, detail="Speech backend not configured")
-
-    form = await request.form()
-    audio_file = form.get("file")
-    if audio_file is None:
-        raise HTTPException(status_code=400, detail="Missing 'file' field")
-
-    audio_bytes = await audio_file.read()
-    language = form.get("language")
-
-    # Detect format from filename
-    filename = getattr(audio_file, "filename", "audio.wav")
-    ext = filename.rsplit(".", 1)[-1] if "." in filename else "wav"
-
-    result = backend.transcribe(audio_bytes, format=ext, language=language or None)
-    return {
-        "text": result.text,
-        "language": result.language,
-        "confidence": result.confidence,
-        "duration_seconds": result.duration_seconds,
-    }
-
-
-@speech_router.get("/health")
-async def speech_health(request: Request):
-    """Check if a speech backend is available."""
-    backend = getattr(request.app.state, "speech_backend", None)
-    if backend is None:
-        return {"available": False, "reason": "No speech backend configured"}
-    return {
-        "available": backend.health(),
-        "backend": backend.backend_id,
-    }
-
-
 # ---- Feedback routes ----
 
 feedback_router = APIRouter(prefix="/v1/feedback", tags=["feedback"])
@@ -910,7 +865,6 @@ def include_all_routes(app) -> None:
     app.include_router(metrics_router)
     app.include_router(websocket_router)
     app.include_router(learning_router)
-    app.include_router(speech_router)
     app.include_router(feedback_router)
     app.include_router(optimize_router)
 
@@ -959,7 +913,6 @@ __all__ = [
     "metrics_router",
     "websocket_router",
     "learning_router",
-    "speech_router",
     "feedback_router",
     "optimize_router",
 ]

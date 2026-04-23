@@ -33,7 +33,7 @@ import { IdentityCard } from './IdentityCard';
 import { PerformanceRings } from './PerformanceRings';
 import { RightTabsPanel } from './RightTabsPanel';
 import { TopStatusBar } from './TopStatusBar';
-import { VoiceOrb3D } from './VoiceOrb3D';
+
 
 export function JarvisHudPage() {
     const { state, error, everLoaded } = useJarvisState(1500);
@@ -134,7 +134,14 @@ export function JarvisHudPage() {
                             <DataStreamLog events={events} />
                         </HudPanel>
                         <div className="min-h-0">
-                            <VoiceOrb3D mood={mood} />
+                            <HudPanel title="Voice" dense>
+                                <div
+                                    className="flex items-center justify-center w-full h-full text-xs"
+                                    style={{ color: 'var(--color-text-tertiary)' }}
+                                >
+                                    voice pipeline offline
+                                </div>
+                            </HudPanel>
                         </div>
                     </div>
                 </div>

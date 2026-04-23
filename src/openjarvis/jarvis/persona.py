@@ -31,8 +31,6 @@ class PersonaSnapshot:
 
     name: str
     honorific: str
-    voice_id: str
-    tts_backend: str
     soul_excerpt: str  # first ~400 chars, shown in the HUD card
     memory_excerpt: str
     user_excerpt: str
@@ -66,8 +64,6 @@ class JarvisPersona:
         *,
         name: str,
         honorific: str,
-        voice_id: str,
-        tts_backend: str,
         soul_path: Path,
         memory_path: Path,
         user_path: Path,
@@ -77,8 +73,6 @@ class JarvisPersona:
     ) -> None:
         self.name = name
         self.honorific = honorific
-        self.voice_id = voice_id
-        self.tts_backend = tts_backend
         self._paths = {
             "soul": Path(soul_path),
             "memory": Path(memory_path),
@@ -208,8 +202,6 @@ class JarvisPersona:
         return PersonaSnapshot(
             name=self.name,
             honorific=self.honorific,
-            voice_id=self.voice_id,
-            tts_backend=self.tts_backend,
             soul_excerpt=excerpt("soul"),
             memory_excerpt=excerpt("memory"),
             user_excerpt=excerpt("user"),

@@ -41,15 +41,10 @@ class UsageInfo(BaseModel):
     total_tokens: int = 0
 
 
-class AudioMeta(BaseModel):
-    url: str
-
-
 class ChoiceMessage(BaseModel):
     role: str = "assistant"
     content: Optional[str] = ""
     tool_calls: Optional[List[Dict[str, Any]]] = None
-    audio: Optional[AudioMeta] = None
 
 
 class Choice(BaseModel):

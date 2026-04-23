@@ -1,7 +1,8 @@
 """Morning Digest Agent — synthesizes a daily briefing from multiple sources.
 
-Thin orchestrator that delegates to digest_collect (data fetching),
-the LLM (narrative synthesis), and text_to_speech (audio generation).
+Thin orchestrator that delegates to digest_collect (data fetching) and the
+LLM (narrative synthesis). Audio generation has been removed; the digest is
+text-only and will be reintroduced on the new voice pipeline if needed.
 """
 
 from __future__ import annotations
@@ -43,9 +44,6 @@ class MorningDigestAgent(ToolUsingAgent):
         )
         self._section_sources = kwargs.pop("section_sources", {})
         self._timezone = kwargs.pop("timezone", "America/Los_Angeles")
-        self._voice_id = kwargs.pop("voice_id", "")
-        self._voice_speed = kwargs.pop("voice_speed", 1.0)
-        self._tts_backend = kwargs.pop("tts_backend", "cartesia")
         self._digest_store_path = kwargs.pop("digest_store_path", "")
         self._honorific = kwargs.pop("honorific", "sir")
         super().__init__(*args, **kwargs)
@@ -193,41 +191,16 @@ class MorningDigestAgent(ToolUsingAgent):
         except Exception:  # noqa: BLE001
             pass  # Evaluator failure shouldn't block digest delivery
 
-        # Step 3: Generate audio via TTS
-        # Strip any markdown that slipped through (##, *, -, etc.)
-        import re
-
-        tts_text = re.sub(r"^#{1,6}\s+", "", narrative, flags=re.MULTILINE)
-        tts_text = re.sub(r"^\s*[-*•]\s+", "", tts_text, flags=re.MULTILINE)
-        tts_text = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", tts_text)
-        tts_text = tts_text.strip()
-
-        tts_call = ToolCall(
-            id="digest-tts-1",
-            name="text_to_speech",
-            arguments=json.dumps(
-                {
-                    "text": tts_text,
-                    "voice_id": self._voice_id,
-                    "backend": self._tts_backend,
-                    "speed": self._voice_speed,
-                }
-            ),
-        )
-        tts_result = self._executor.execute(tts_call)
-        audio_path = (
-            tts_result.metadata.get("audio_path", "") if tts_result.success else ""
-        )
-
-        # Step 4: Store the artifact
+        # Step 3: Store the artifact (audio generation has been removed;
+        # the new voice pipeline will handle speech synthesis).
         artifact = DigestArtifact(
             text=narrative,
-            audio_path=Path(audio_path) if audio_path else Path(""),
+            audio_path=Path(""),
             sections={},
             sources_used=sources,
             generated_at=datetime.now(),
             model_used=self._model,
-            voice_used=self._voice_id,
+            voice_used="",
             quality_score=quality_score,
             evaluator_feedback=evaluator_feedback,
         )
@@ -239,10 +212,9 @@ class MorningDigestAgent(ToolUsingAgent):
         self._emit_turn_end(turns=1)
         return AgentResult(
             content=narrative,
-            tool_results=[collect_result, tts_result],
+            tool_results=[collect_result],
             turns=1,
             metadata={
-                "audio_path": audio_path,
                 "sources_used": sources,
             },
         )

@@ -135,6 +135,28 @@ class TestApplyPatch:
         _, changed = service.apply_patch({"intelligence.temperature": t})
         assert changed == []
 
+    def test_speech_provider_round_trip(
+        self, service: ConfigService, cfg_path: Path
+    ) -> None:
+        """speech.provider can be patched and persisted like any other field."""
+        _, changed = service.apply_patch({"speech.provider": "gemini"})
+        assert service.current().speech.provider == "gemini"
+
+    def test_speech_api_key_round_trip(
+        self, service: ConfigService, cfg_path: Path
+    ) -> None:
+        """speech.gemini_api_key is stored and then masked in dump()."""
+        service.apply_patch({"speech.gemini_api_key": "test-key-xyz"})
+        assert service.current().speech.gemini_api_key == "test-key-xyz"
+        dumped = service.dump(mask_secrets=True)
+        assert dumped["speech"]["gemini_api_key"] == MASKED_PLACEHOLDER
+
+    def test_speech_enabled_round_trip(
+        self, service: ConfigService, cfg_path: Path
+    ) -> None:
+        service.apply_patch({"speech.enabled": True})
+        assert service.current().speech.enabled is True
+
 
 class TestSchema:
     def test_contains_expected_sections(self, service: ConfigService) -> None:
@@ -154,6 +176,72 @@ class TestSchema:
         ):
             assert name in sections
             assert "properties" in sections[name]
+
+    def test_speech_section_title(self, service: ConfigService) -> None:
+        schema = service.schema()
+        assert schema["sections"]["speech"]["title"] == "Speech Settings"
+
+    def test_speech_provider_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        provider_field = schema["sections"]["speech"]["properties"]["provider"]
+        assert "enum" in provider_field
+        assert "gemini" in provider_field["enum"]
+
+    def test_speech_gemini_model_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        model_field = schema["sections"]["speech"]["properties"]["gemini_model"]
+        assert "enum" in model_field
+        assert len(model_field["enum"]) >= 1
+
+    def test_speech_gemini_api_key_is_secret(self, service: ConfigService) -> None:
+        schema = service.schema()
+        api_key_field = schema["sections"]["speech"]["properties"]["gemini_api_key"]
+        assert api_key_field.get("secret") is True
+
+    def test_speech_enabled_is_boolean(self, service: ConfigService) -> None:
+        schema = service.schema()
+        enabled_field = schema["sections"]["speech"]["properties"]["enabled"]
+        assert enabled_field["type"] == "boolean"
+
+    def test_speech_section_has_master_toggle(self, service: ConfigService) -> None:
+        """The UI hoists ``speech.enabled`` to a prominent header."""
+        schema = service.schema()
+        assert schema["sections"]["speech"].get("master_toggle") == "enabled"
+
+    def test_speech_language_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        language_field = schema["sections"]["speech"]["properties"]["language"]
+        assert language_field.get("enum") == ["en-US", "el-GR", "es-ES"]
+
+    def test_non_master_sections_have_no_master_toggle(
+        self, service: ConfigService
+    ) -> None:
+        schema = service.schema()
+        for name, section in schema["sections"].items():
+            if name == "speech":
+                continue
+            assert "master_toggle" not in section
+
+    def test_engine_default_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        default_field = schema["sections"]["engine"]["properties"]["default"]
+        assert "enum" in default_field
+        assert "ollama" in default_field["enum"]
+
+    def test_security_mode_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        mode_field = schema["sections"]["security"]["properties"]["mode"]
+        assert mode_field.get("enum") == ["redact", "warn", "block"]
+
+    def test_security_profile_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        profile_field = schema["sections"]["security"]["properties"]["profile"]
+        assert profile_field.get("enum") == ["", "personal", "shared", "server"]
+
+    def test_jarvis_hud_animations_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        hud_field = schema["sections"]["jarvis"]["properties"]["hud_animations"]
+        assert hud_field.get("enum") == ["off", "light", "heavy"]
 
     def test_secret_flag(self, service: ConfigService) -> None:
         schema = service.schema()

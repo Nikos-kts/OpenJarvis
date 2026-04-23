@@ -1,7 +1,7 @@
 """End-to-end integration test for the morning digest pipeline.
 
 Uses mocked connectors and engine to verify the full flow:
-digest_collect -> LLM synthesis -> TTS -> DigestStore -> CLI delivery.
+digest_collect -> LLM synthesis -> DigestStore -> CLI delivery.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from openjarvis.core.types import ToolResult
 
 
 def test_full_digest_pipeline(tmp_path):
-    """Verify collect -> synthesize -> TTS -> store -> retrieve."""
+    """Verify collect -> synthesize -> store -> retrieve."""
     from openjarvis.agents.morning_digest import MorningDigestAgent
 
     # Mock engine returns a narrative
@@ -39,15 +39,6 @@ def test_full_digest_pipeline(tmp_path):
         success=True,
         metadata={"total_items": 6},
     )
-    tts_result = ToolResult(
-        tool_name="text_to_speech",
-        content=str(tmp_path / "digest.mp3"),
-        success=True,
-        metadata={"audio_path": str(tmp_path / "digest.mp3")},
-    )
-
-    # Write fake audio
-    (tmp_path / "digest.mp3").write_bytes(b"fake-mp3-audio")
 
     db_path = str(tmp_path / "digest.db")
 
@@ -62,13 +53,12 @@ def test_full_digest_pipeline(tmp_path):
     with patch.object(
         agent._executor,
         "execute",
-        side_effect=[collect_result, tts_result],
+        side_effect=[collect_result],
     ):
         result = agent.run("Generate morning digest")
 
     # Verify agent result
     assert "Good morning" in result.content
-    assert result.metadata["audio_path"] == str(tmp_path / "digest.mp3")
 
     # Verify stored in DigestStore
     store = DigestStore(db_path=db_path)

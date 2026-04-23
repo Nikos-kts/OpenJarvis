@@ -6,7 +6,6 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import 'katex/dist/katex.min.css';
 import { Copy, Check } from 'lucide-react';
-import { AudioPlayer } from './AudioPlayer';
 import { ToolCallCard } from './ToolCallCard';
 import { XRayFooter } from './XRayFooter';
 import type { ChatMessage } from '../../types';
@@ -131,9 +130,6 @@ export function MessageBubble({ message }: Props) {
           ))}
         </div>
       )}
-
-      {/* Audio player (e.g. morning digest) */}
-      {message.audio?.url && <AudioPlayer src={message.audio.url} />}
 
       {/* Assistant message */}
       {cleanContent && (

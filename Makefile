@@ -13,7 +13,7 @@ UV      := source $$HOME/.local/bin/env 2>/dev/null; uv
 ## install      – install Python + frontend deps + Rust extension locally
 install:
 	@echo "Installing Python deps..."
-	$(UV) sync --extra server --extra inference-google --extra inference-cloud --extra memory-faiss --extra speech --extra scheduler --extra tools-search --extra dev
+	$(UV) sync --extra server --extra inference-google --extra inference-cloud --extra memory-faiss --extra scheduler --extra tools-search --extra dev
 	@echo "Installing frontend deps..."
 	cd frontend && npm install
 	@$(MAKE) build-rust

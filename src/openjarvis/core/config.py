@@ -399,7 +399,25 @@ class LemonadeEngineConfig:
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
 
-    default: str = "ollama"
+    default: str = field(
+        default="ollama",
+        metadata={
+            "enum": [
+                "ollama",
+                "vllm",
+                "sglang",
+                "llamacpp",
+                "mlx",
+                "lmstudio",
+                "exo",
+                "nexa",
+                "uzu",
+                "apple_fm",
+                "gemma_cpp",
+                "lemonade",
+            ]
+        },
+    )
     ollama: OllamaEngineConfig = field(default_factory=OllamaEngineConfig)
     vllm: VLLMEngineConfig = field(default_factory=VLLMEngineConfig)
     sglang: SGLangEngineConfig = field(default_factory=SGLangEngineConfig)
@@ -547,7 +565,10 @@ class IntelligenceConfig:
 class RoutingLearningConfig:
     """Routing sub-policy config within Learning."""
 
-    policy: str = "heuristic"  # heuristic | learned
+    policy: str = field(
+        default="heuristic",
+        metadata={"enum": ["heuristic", "learned"]},
+    )
     min_samples: int = 5  # Min traces before trusting learned routing
 
 
@@ -640,7 +661,10 @@ class GEPAOptimizerConfig:
 class IntelligenceLearningConfig:
     """Intelligence sub-policy config within Learning."""
 
-    policy: str = "none"  # none | sft | grpo
+    policy: str = field(
+        default="none",
+        metadata={"enum": ["none", "sft", "grpo"]},
+    )
     sft: SFTConfig = field(default_factory=SFTConfig)
     grpo: GRPOConfig = field(default_factory=GRPOConfig)
 
@@ -649,7 +673,10 @@ class IntelligenceLearningConfig:
 class AgentLearningConfig:
     """Agent sub-policy config within Learning."""
 
-    policy: str = "none"  # none | dspy | gepa
+    policy: str = field(
+        default="none",
+        metadata={"enum": ["none", "dspy", "gepa"]},
+    )
     dspy: DSPyOptimizerConfig = field(default_factory=DSPyOptimizerConfig)
     gepa: GEPAOptimizerConfig = field(default_factory=GEPAOptimizerConfig)
 
@@ -1056,7 +1083,10 @@ class SecurityConfig:
     enabled: bool = True
     scan_input: bool = True
     scan_output: bool = True
-    mode: str = "redact"  # "redact" | "warn" | "block"
+    mode: str = field(
+        default="redact",
+        metadata={"enum": ["redact", "warn", "block"]},
+    )
     secret_scanner: bool = True
     pii_scanner: bool = True
     audit_log_path: str = str(DEFAULT_CONFIG_DIR / "db" / "audit.db")
@@ -1069,7 +1099,11 @@ class SecurityConfig:
     rate_limit_burst: int = 10
     local_engine_bypass: bool = False
     local_tool_bypass: bool = False
-    profile: str = ""
+    profile: str = field(
+        default="",
+        # "" = no preset (raw user settings). Keys match _SECURITY_PROFILES.
+        metadata={"enum": ["", "personal", "shared", "server"]},
+    )
     vault_key_path: str = str(DEFAULT_CONFIG_DIR / ".vault_key")
     capabilities: CapabilitiesConfig = field(default_factory=CapabilitiesConfig)
 
@@ -1211,17 +1245,6 @@ class OperatorsConfig:
 
 
 @dataclass(slots=True)
-class SpeechConfig:
-    """Speech-to-text settings."""
-
-    backend: str = "auto"  # "auto", "faster-whisper", "openai", "deepgram"
-    model: str = "base"  # Whisper model size: tiny, base, small, medium, large-v3
-    language: str = ""  # Empty = auto-detect
-    device: str = "auto"  # "auto", "cpu", "cuda"
-    compute_type: str = "float16"  # "float16", "int8", "float32"
-
-
-@dataclass(slots=True)
 class OptimizeConfig:
     """Configuration optimization settings."""
 
@@ -1257,9 +1280,6 @@ class JarvisPersonaConfig:
     # Identity
     name: str = "Jarvis"
     honorific: str = "Sir"
-    # Voice defaults — actual TTS backend is resolved via `speech.*`
-    voice_id: str = "default"
-    tts_backend: str = "auto"
     # Runtime
     model: str = ""                 # empty = inherit intelligence.default_model
     max_turns: int = 12
@@ -1273,7 +1293,10 @@ class JarvisPersonaConfig:
     # HUD
     hud_enabled: bool = True
     hud_theme: str = "arc-reactor-dark"  # dark cyan-on-black default
-    hud_animations: str = "heavy"        # "off" | "light" | "heavy"
+    hud_animations: str = field(
+        default="heavy",
+        metadata={"enum": ["off", "light", "heavy"]},
+    )
 
 
 @dataclass(slots=True)
@@ -1357,9 +1380,6 @@ class DigestConfig:
         default_factory=lambda: ["github", "financial", "music", "fitness"]
     )
     honorific: str = "sir"
-    voice_id: str = ""
-    voice_speed: float = 1.0
-    tts_backend: str = "cartesia"
     messages: DigestSectionConfig = field(
         default_factory=lambda: DigestSectionConfig(
             sources=["gmail", "slack", "google_tasks"]
@@ -1374,6 +1394,45 @@ class DigestConfig:
     world: DigestSectionConfig = field(
         default_factory=lambda: DigestSectionConfig(sources=[])
     )
+
+
+@dataclass(slots=True)
+class VoiceConfig:
+    """Voice pipeline settings (Gemini Live-first architecture).
+
+    Phase 2 exposes provider selection, API credentials, and audio knobs
+    so everything shows up in the Speech Settings tab automatically.
+    Providers beyond Gemini (Deepgram, local) will be added in Phase 4.
+    """
+
+    enabled: bool = False
+    # Provider dropdown — extend this tuple as more providers graduate from
+    # Phase 4; the schema layer turns ``metadata["enum"]`` into a <select>.
+    provider: str = field(
+        default="gemini",
+        metadata={"enum": ["gemini"]},
+    )
+    # Gemini Live API key — stored in config.toml, masked in HTTP responses.
+    gemini_api_key: str = ""
+    # Gemini Live model identifier.
+    gemini_model: str = field(
+        default="gemini-live-2.5-flash-preview",
+        metadata={
+            "enum": [
+                "gemini-live-2.5-flash-preview",
+                "gemini-2.0-flash-live-001",
+            ]
+        },
+    )
+    # STT language hint (BCP-47). Curated list: English (US), Greek, Spanish.
+    language: str = field(
+        default="en-US",
+        metadata={"enum": ["en-US", "el-GR", "es-ES"]},
+    )
+    # Voice Activity Detection sensitivity (0.0–1.0; higher = less sensitive).
+    vad_threshold: float = 0.5
+    # Audio capture sample rate passed to the Rust audio daemon (Hz).
+    sample_rate: int = 16000
 
 
 @dataclass
@@ -1397,7 +1456,6 @@ class JarvisConfig:
     sessions: SessionConfig = field(default_factory=SessionConfig)
     a2a: A2AConfig = field(default_factory=A2AConfig)
     operators: OperatorsConfig = field(default_factory=OperatorsConfig)
-    speech: SpeechConfig = field(default_factory=SpeechConfig)
     optimize: OptimizeConfig = field(default_factory=OptimizeConfig)
     agent_manager: AgentManagerConfig = field(default_factory=AgentManagerConfig)
     jarvis: JarvisPersonaConfig = field(default_factory=JarvisPersonaConfig)
@@ -1406,6 +1464,7 @@ class JarvisConfig:
     compression: CompressionConfig = field(default_factory=CompressionConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
+    speech: VoiceConfig = field(default_factory=VoiceConfig)
 
     @property
     def memory(self) -> StorageConfig:
@@ -1612,10 +1671,10 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
             "sessions",
             "a2a",
             "operators",
-            "speech",
             "optimize",
             "agent_manager",
             "digest",
+            "speech",
         )
         for section_name in top_sections:
             if section_name in data:
@@ -1942,7 +2001,6 @@ __all__ = [
     "SessionConfig",
     "SignalChannelConfig",
     "SlackChannelConfig",
-    "SpeechConfig",
     "StorageConfig",
     "TeamsChannelConfig",
     "TelegramChannelConfig",
@@ -1950,6 +2008,7 @@ __all__ = [
     "ToolsConfig",
     "TracesConfig",
     "VLLMEngineConfig",
+    "VoiceConfig",
     "WebChatChannelConfig",
     "WebhookChannelConfig",
     "WhatsAppBaileysChannelConfig",
