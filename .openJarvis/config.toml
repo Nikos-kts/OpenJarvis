@@ -78,7 +78,7 @@ default_model = "qwen2.5:7b"           # recommended for this hardware
 # Agent — harness, tools, system prompt
 # =============================================================================
 [agent]
-default_agent = "simple"               # built-in: simple | orchestrator | react | plan_execute …
+default_agent = "orchestrator"               # built-in: simple | orchestrator | react | plan_execute …
 # max_turns = 10
 # tools = ""                           # comma-separated tool names (per-agent override)
 # objective = ""                       # concise purpose string (routing + docs)
