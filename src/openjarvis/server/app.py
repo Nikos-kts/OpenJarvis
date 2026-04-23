@@ -259,6 +259,13 @@ def create_app(
         logger.warning("Failed to mount /v1/jarvis router: %s", exc)
     include_all_routes(app)
 
+    try:
+        from openjarvis.server.voice_routes import create_voice_router
+
+        app.include_router(create_voice_router())
+    except Exception as exc:
+        logger.warning("Failed to mount /v1/voice router: %s", exc)
+
     # Restore SendBlue channel bindings from database on startup
     _restore_sendblue_bindings(app)
 
