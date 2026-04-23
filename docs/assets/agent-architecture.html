@@ -484,7 +484,7 @@
             agent: {
                 id: 'agent',
                 title: 'Built-in "jarvis" agent instance',
-                subtitle: 'e.g. SimpleAgent / OrchestratorAgent',
+                subtitle: 'JarvisAgent (primary) or SimpleAgent/OrchestratorAgent',
                 kind: 'agent',
                 x: 570,
                 y: 260,
@@ -492,9 +492,14 @@
                 h: 72,
                 info: {
                     summary:
-                        "A Python class instance. <strong>It is not a model</strong> — 'jarvis' is the <em>harness</em>: it assembles the prompt, decides whether to call tools, loops if needed, and hands raw messages to the engine.",
+                        "A Python class instance. <strong>It is not a model</strong> — 'jarvis' is the <em>harness</em>: it assembles the prompt, decides whether to call tools, loops if needed, and hands raw messages to the engine. When <code>[jarvis] enabled = true</code>, the primary <code>JarvisAgent</code> singleton replaces the default — it wraps an <code>OrchestratorAgent</code>, layers SOUL/MEMORY/USER, exposes a <code>delegate_to_subagent</code> tool, and is driven by the HUD at <code>/</code> via <code>/v1/jarvis/*</code> endpoints.",
                     tags: ['Python', 'class'],
                     files: [
+                        { path: 'src/openjarvis/jarvis/agent.py', note: 'JarvisAgent (primary, composition over Orchestrator)' },
+                        { path: 'src/openjarvis/jarvis/persona.py', note: 'JarvisPersona (SOUL/MEMORY/USER loader)' },
+                        { path: 'src/openjarvis/jarvis/delegation.py', note: 'DelegateToSubAgentTool (sync/async)' },
+                        { path: 'src/openjarvis/jarvis/state_store.py', note: 'JarvisStateStore (.openJarvis/db/jarvis.db)' },
+                        { path: 'src/openjarvis/jarvis/routes.py', note: '/v1/jarvis/{state,stream,skills,delegate,…}' },
                         { path: 'src/openjarvis/agents/_stubs.py', note: 'BaseAgent.run(), _build_messages(), _generate()' },
                         { path: 'src/openjarvis/agents/simple.py', note: 'single-turn default' },
                         { path: 'src/openjarvis/agents/orchestrator.py', note: 'multi-turn planner + workers' },
