@@ -35,6 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install audio system dependencies (ALSA for cpal)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -85,6 +88,9 @@ jobs:
         working-directory: rust
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install audio system dependencies (ALSA for cpal)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

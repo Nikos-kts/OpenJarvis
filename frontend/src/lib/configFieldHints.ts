@@ -189,8 +189,9 @@ export const FIELD_HINTS: Record<string, FieldHint> = {
     },
     'speech.language': {
         text:
-            "BCP-47 language code for speech recognition (e.g. 'en-US', " +
-            "'el-GR'). Used as a hint to the Gemini Live API.",
+            'Language of your voice input. Currently English (en-US), ' +
+            'Greek (el-GR), and Spanish (es-ES) are supported. Used as ' +
+            'a hint to the Gemini Live API.',
         scope: 'Backend (Python)',
     },
     'speech.vad_threshold': {
