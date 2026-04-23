@@ -203,6 +203,46 @@ class TestSchema:
         enabled_field = schema["sections"]["speech"]["properties"]["enabled"]
         assert enabled_field["type"] == "boolean"
 
+    def test_speech_section_has_master_toggle(self, service: ConfigService) -> None:
+        """The UI hoists ``speech.enabled`` to a prominent header."""
+        schema = service.schema()
+        assert schema["sections"]["speech"].get("master_toggle") == "enabled"
+
+    def test_speech_language_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        language_field = schema["sections"]["speech"]["properties"]["language"]
+        assert language_field.get("enum") == ["en-US", "el-GR", "es-ES"]
+
+    def test_non_master_sections_have_no_master_toggle(
+        self, service: ConfigService
+    ) -> None:
+        schema = service.schema()
+        for name, section in schema["sections"].items():
+            if name == "speech":
+                continue
+            assert "master_toggle" not in section
+
+    def test_engine_default_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        default_field = schema["sections"]["engine"]["properties"]["default"]
+        assert "enum" in default_field
+        assert "ollama" in default_field["enum"]
+
+    def test_security_mode_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        mode_field = schema["sections"]["security"]["properties"]["mode"]
+        assert mode_field.get("enum") == ["redact", "warn", "block"]
+
+    def test_security_profile_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        profile_field = schema["sections"]["security"]["properties"]["profile"]
+        assert profile_field.get("enum") == ["", "personal", "shared", "server"]
+
+    def test_jarvis_hud_animations_has_enum(self, service: ConfigService) -> None:
+        schema = service.schema()
+        hud_field = schema["sections"]["jarvis"]["properties"]["hud_animations"]
+        assert hud_field.get("enum") == ["off", "light", "heavy"]
+
     def test_secret_flag(self, service: ConfigService) -> None:
         schema = service.schema()
         telegram = schema["sections"]["channel"]["properties"]["telegram"]

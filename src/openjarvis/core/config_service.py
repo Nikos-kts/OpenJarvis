@@ -290,6 +290,14 @@ _TYPE_MAP: Dict[type, str] = {
     dict: "object",
 }
 
+# Sections that have a single boolean master switch which gates the rest
+# of the form.  The UI renders the named field as a prominent card at the
+# top of the section and greys out everything else when it is ``False``.
+# Map: section name on ``JarvisConfig`` → dataclass field name.
+_MASTER_TOGGLE_FIELDS: Dict[str, str] = {
+    "speech": "enabled",
+}
+
 
 def _field_schema(
     cls: type,
@@ -363,13 +371,20 @@ def build_schema(defaults: JarvisConfig) -> Dict[str, Any]:
         if not is_dataclass(resolved):
             continue
         nested_default = getattr(defaults, name, None)
-        sections[name] = {
+        section: Dict[str, Any] = {
             "title": _SECTION_TITLES.get(name, name.replace("_", " ").title()),
             "readonly": name == "hardware",
             "properties": _dataclass_schema(
                 resolved, prefix=name, defaults_obj=nested_default
             ),
         }
+        # Sections with a boolean master toggle advertise the field name so
+        # the UI can hoist it to a prominent header and disable everything
+        # else when the toggle is off.
+        master = _MASTER_TOGGLE_FIELDS.get(name)
+        if master and master in section["properties"]:
+            section["master_toggle"] = master
+        sections[name] = section
     return {"sections": sections}
 
 

@@ -399,7 +399,25 @@ class LemonadeEngineConfig:
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
 
-    default: str = "ollama"
+    default: str = field(
+        default="ollama",
+        metadata={
+            "enum": [
+                "ollama",
+                "vllm",
+                "sglang",
+                "llamacpp",
+                "mlx",
+                "lmstudio",
+                "exo",
+                "nexa",
+                "uzu",
+                "apple_fm",
+                "gemma_cpp",
+                "lemonade",
+            ]
+        },
+    )
     ollama: OllamaEngineConfig = field(default_factory=OllamaEngineConfig)
     vllm: VLLMEngineConfig = field(default_factory=VLLMEngineConfig)
     sglang: SGLangEngineConfig = field(default_factory=SGLangEngineConfig)
@@ -547,7 +565,10 @@ class IntelligenceConfig:
 class RoutingLearningConfig:
     """Routing sub-policy config within Learning."""
 
-    policy: str = "heuristic"  # heuristic | learned
+    policy: str = field(
+        default="heuristic",
+        metadata={"enum": ["heuristic", "learned"]},
+    )
     min_samples: int = 5  # Min traces before trusting learned routing
 
 
@@ -640,7 +661,10 @@ class GEPAOptimizerConfig:
 class IntelligenceLearningConfig:
     """Intelligence sub-policy config within Learning."""
 
-    policy: str = "none"  # none | sft | grpo
+    policy: str = field(
+        default="none",
+        metadata={"enum": ["none", "sft", "grpo"]},
+    )
     sft: SFTConfig = field(default_factory=SFTConfig)
     grpo: GRPOConfig = field(default_factory=GRPOConfig)
 
@@ -649,7 +673,10 @@ class IntelligenceLearningConfig:
 class AgentLearningConfig:
     """Agent sub-policy config within Learning."""
 
-    policy: str = "none"  # none | dspy | gepa
+    policy: str = field(
+        default="none",
+        metadata={"enum": ["none", "dspy", "gepa"]},
+    )
     dspy: DSPyOptimizerConfig = field(default_factory=DSPyOptimizerConfig)
     gepa: GEPAOptimizerConfig = field(default_factory=GEPAOptimizerConfig)
 
@@ -1056,7 +1083,10 @@ class SecurityConfig:
     enabled: bool = True
     scan_input: bool = True
     scan_output: bool = True
-    mode: str = "redact"  # "redact" | "warn" | "block"
+    mode: str = field(
+        default="redact",
+        metadata={"enum": ["redact", "warn", "block"]},
+    )
     secret_scanner: bool = True
     pii_scanner: bool = True
     audit_log_path: str = str(DEFAULT_CONFIG_DIR / "db" / "audit.db")
@@ -1069,7 +1099,11 @@ class SecurityConfig:
     rate_limit_burst: int = 10
     local_engine_bypass: bool = False
     local_tool_bypass: bool = False
-    profile: str = ""
+    profile: str = field(
+        default="",
+        # "" = no preset (raw user settings). Keys match _SECURITY_PROFILES.
+        metadata={"enum": ["", "personal", "shared", "server"]},
+    )
     vault_key_path: str = str(DEFAULT_CONFIG_DIR / ".vault_key")
     capabilities: CapabilitiesConfig = field(default_factory=CapabilitiesConfig)
 
@@ -1259,7 +1293,10 @@ class JarvisPersonaConfig:
     # HUD
     hud_enabled: bool = True
     hud_theme: str = "arc-reactor-dark"  # dark cyan-on-black default
-    hud_animations: str = "heavy"        # "off" | "light" | "heavy"
+    hud_animations: str = field(
+        default="heavy",
+        metadata={"enum": ["off", "light", "heavy"]},
+    )
 
 
 @dataclass(slots=True)
@@ -1387,8 +1424,11 @@ class VoiceConfig:
             ]
         },
     )
-    # STT language hint (BCP-47, e.g. "en-US", "el-GR").  Empty = auto-detect.
-    language: str = "en-US"
+    # STT language hint (BCP-47). Curated list: English (US), Greek, Spanish.
+    language: str = field(
+        default="en-US",
+        metadata={"enum": ["en-US", "el-GR", "es-ES"]},
+    )
     # Voice Activity Detection sensitivity (0.0–1.0; higher = less sensitive).
     vad_threshold: float = 0.5
     # Audio capture sample rate passed to the Rust audio daemon (Hz).

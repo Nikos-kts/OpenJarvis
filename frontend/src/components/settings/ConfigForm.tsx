@@ -68,6 +68,26 @@ export function ConfigForm({
         [section.properties],
     );
 
+    // Master toggle: a single boolean field that gates the rest of the
+    // form.  We hoist it to a prominent card and grey out the remaining
+    // fields when it is off.
+    const masterKey = section.master_toggle;
+    const masterField =
+        masterKey && section.properties[masterKey]?.type === 'boolean'
+            ? section.properties[masterKey]
+            : null;
+    const masterDotted = masterField ? `${sectionKey}.${masterKey}` : null;
+    const masterValue = masterDotted
+        ? Boolean(currentValue(masterDotted))
+        : true;
+    const bodyProperties = masterField
+        ? Object.fromEntries(
+              Object.entries(section.properties).filter(
+                  ([n]) => n !== masterKey,
+              ),
+          )
+        : section.properties;
+
     return (
         <div className="flex flex-col gap-4">
             <header className="flex items-center justify-between">
@@ -120,18 +140,41 @@ export function ConfigForm({
             </header>
 
             <div className="flex flex-col gap-2">
-                {Object.entries(section.properties).map(([name, field]) => (
-                    <FieldView
-                        key={name}
-                        name={name}
-                        field={field}
-                        parentPath={sectionKey}
+                {masterField && masterKey && masterDotted && (
+                    <MasterToggleCard
+                        name={masterKey}
+                        dotted={masterDotted}
+                        value={masterValue}
                         readonly={Boolean(section.readonly)}
-                        showAdvanced={showAdvanced}
-                        currentValue={currentValue}
-                        markDirty={markDirty}
+                        onChange={(v) => markDirty(masterDotted, v)}
                     />
-                ))}
+                )}
+                <div
+                    style={
+                        masterField && !masterValue
+                            ? {
+                                  opacity: 0.4,
+                                  pointerEvents: 'none',
+                                  filter: 'grayscale(0.6)',
+                              }
+                            : undefined
+                    }
+                    aria-disabled={masterField ? !masterValue : undefined}
+                    className="flex flex-col gap-2"
+                >
+                    {Object.entries(bodyProperties).map(([name, field]) => (
+                        <FieldView
+                            key={name}
+                            name={name}
+                            field={field}
+                            parentPath={sectionKey}
+                            readonly={Boolean(section.readonly)}
+                            showAdvanced={showAdvanced}
+                            currentValue={currentValue}
+                            markDirty={markDirty}
+                        />
+                    ))}
+                </div>
             </div>
 
             {Object.keys(dirty).length > 0 && (
@@ -192,6 +235,109 @@ export function ConfigForm({
 // ---------------------------------------------------------------------------
 // Field renderer (recursive)
 // ---------------------------------------------------------------------------
+
+interface MasterToggleCardProps {
+    name: string;
+    dotted: string;
+    value: boolean;
+    readonly: boolean;
+    onChange: (v: boolean) => void;
+}
+
+/**
+ * Prominent on/off switch rendered at the top of a section whose schema
+ * declares a ``master_toggle``.  Clicking anywhere on the card flips the
+ * switch; the parent form greys out the remaining fields when off.
+ */
+function MasterToggleCard({
+    name,
+    dotted,
+    value,
+    readonly,
+    onChange,
+}: MasterToggleCardProps) {
+    const hint = getFieldHint(dotted);
+    const label = humanise(name);
+    return (
+        <div
+            role="group"
+            aria-label={`${label} master toggle`}
+            className="flex items-center justify-between gap-4 p-4 rounded-lg"
+            style={{
+                background: value
+                    ? 'var(--color-surface, #1a1a1a)'
+                    : 'var(--color-bg)',
+                border: `1px solid ${
+                    value
+                        ? 'var(--color-accent, #06b6d4)'
+                        : 'var(--color-border)'
+                }`,
+                boxShadow: value
+                    ? '0 0 0 1px var(--color-accent, #06b6d4) inset'
+                    : 'none',
+                transition: 'all 120ms ease-in-out',
+            }}
+        >
+            <div className="flex-1 min-w-0">
+                <div
+                    className="text-base font-semibold flex items-center gap-2"
+                    style={{ color: 'var(--color-text)' }}
+                >
+                    <span>{label}</span>
+                    {hint && <HintIcon text={hint.text} scope={hint.scope} />}
+                    <span
+                        className="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wide"
+                        style={{
+                            background: value
+                                ? 'var(--color-accent, #06b6d4)'
+                                : 'var(--color-border)',
+                            color: value
+                                ? 'var(--color-accent-fg, white)'
+                                : 'var(--color-text-tertiary)',
+                        }}
+                    >
+                        {value ? 'on' : 'off'}
+                    </span>
+                </div>
+                <div
+                    className="text-xs mt-0.5"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                >
+                    <code>{dotted}</code>
+                </div>
+            </div>
+            <label
+                className="relative inline-flex items-center cursor-pointer shrink-0"
+                style={{ opacity: readonly ? 0.5 : 1 }}
+            >
+                <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={value}
+                    disabled={readonly}
+                    onChange={(e) => onChange(e.target.checked)}
+                />
+                <span
+                    className="w-12 h-6 rounded-full transition-colors"
+                    style={{
+                        background: value
+                            ? 'var(--color-accent, #06b6d4)'
+                            : 'var(--color-border)',
+                    }}
+                />
+                <span
+                    className="absolute left-0.5 top-0.5 w-5 h-5 rounded-full transition-transform"
+                    style={{
+                        background: 'white',
+                        transform: value
+                            ? 'translateX(24px)'
+                            : 'translateX(0)',
+                    }}
+                />
+            </label>
+        </div>
+    );
+}
 
 interface FieldViewProps {
     name: string;
