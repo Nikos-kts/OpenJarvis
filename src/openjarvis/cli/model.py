@@ -15,8 +15,11 @@ from rich.table import Table
 from openjarvis.core.config import load_config
 from openjarvis.core.registry import ModelRegistry
 from openjarvis.engine import discover_engines, discover_models
-from openjarvis.intelligence import merge_discovered_models, register_builtin_models
-from openjarvis.intelligence.model_catalog import BUILTIN_MODELS
+from openjarvis.engine.model_catalog import (
+    BUILTIN_MODELS,
+    merge_discovered_models,
+    register_builtin_models,
+)
 
 
 @click.group()

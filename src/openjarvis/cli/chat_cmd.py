@@ -50,7 +50,7 @@ def chat(
 
     # Resolve engine
     from openjarvis.engine import get_engine
-    from openjarvis.intelligence import register_builtin_models
+    from openjarvis.engine.model_catalog import register_builtin_models
 
     register_builtin_models()
 

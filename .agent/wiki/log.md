@@ -74,6 +74,16 @@ Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pe
 - Smoke: imports OK; pytest collect = 4583 tests, 0 errors (down from 4592)
 - Architecture is now effectively 4 primitives (Engine, Agents, Tools+Memory, Intelligence-as-model-catalog). A.2.c renames intelligence/ into engine/ next; A.2.d rewrites architecture.md.
 
+## [2026-05-03] cleanup | Phase A.2.c — absorb intelligence/ into engine/
+
+- `git mv src/openjarvis/intelligence/model_catalog.py → src/openjarvis/engine/model_catalog.py`; deleted empty `src/openjarvis/intelligence/__init__.py` + dir
+- `git mv tests/intelligence/test_model_catalog{,_extended}.py → tests/engine/`
+- Updated 7 import sites: `core/config.py`, `cli/{ask,chat_cmd,model,serve}.py`, `tests/integration/test_integration_extended.py`, `tests/cli/test_chat_cmd.py`, plus the two moved tests
+- Pattern: `from openjarvis.intelligence(.model_catalog) import X` → `from openjarvis.engine.model_catalog import X`
+- The `config.intelligence` namespace in `core/config.py` is unrelated (runtime knobs like temperature/max_tokens) and stays as-is
+- Smoke: imports OK; 65 BUILTIN_MODELS; pytest collect = 4583 tests, 0 errors
+- Architecture is now 3 primitives — Engine, Agents, Tools+Memory. A.2.d will rewrite architecture.md to reflect this and elevate `jarvis/` as the orchestration layer over them.
+
 ## [2026-05-03] cleanup | Phase C — connector + channel pruning
 
 - Connectors cut: `dropbox`, `gmail_imap`, `apple_music`, `outlook`, `google_tasks` (5)

@@ -259,7 +259,7 @@ def recommend_model(hw: HardwareInfo, engine: str) -> str:
     Falls back to scanning the full catalog if the tiered model is not
     compatible with the selected engine.
     """
-    from openjarvis.intelligence.model_catalog import BUILTIN_MODELS
+    from openjarvis.engine.model_catalog import BUILTIN_MODELS
 
     available_gb = _available_memory_gb(hw)
     if available_gb <= 0:

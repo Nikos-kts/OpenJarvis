@@ -430,7 +430,7 @@ class TestModelCatalogIntegration:
 
     def test_all_models_routable(self):
         """Every model in catalog has required fields."""
-        from openjarvis.intelligence.model_catalog import (
+        from openjarvis.engine.model_catalog import (
             BUILTIN_MODELS,
         )
 
@@ -442,7 +442,7 @@ class TestModelCatalogIntegration:
 
     def test_local_models_have_engine_compat(self):
         """Every local model has at least one engine."""
-        from openjarvis.intelligence.model_catalog import (
+        from openjarvis.engine.model_catalog import (
             BUILTIN_MODELS,
         )
 
@@ -452,7 +452,7 @@ class TestModelCatalogIntegration:
 
     def test_cloud_models_require_api_key(self):
         """All cloud models require an API key."""
-        from openjarvis.intelligence.model_catalog import (
+        from openjarvis.engine.model_catalog import (
             BUILTIN_MODELS,
         )
 

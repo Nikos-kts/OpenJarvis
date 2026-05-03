@@ -15,7 +15,7 @@ from openjarvis.engine import (
     discover_models,
     get_engine,
 )
-from openjarvis.intelligence import (
+from openjarvis.engine.model_catalog import (
     merge_discovered_models,
     register_builtin_models,
 )

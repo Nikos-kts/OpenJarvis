@@ -108,7 +108,7 @@ class TestChatAgents:
         with (
             patch("openjarvis.cli.chat_cmd.load_config", return_value=config),
             patch("openjarvis.engine.get_engine", return_value=("mock", engine)),
-            patch("openjarvis.intelligence.register_builtin_models"),
+            patch("openjarvis.engine.model_catalog.register_builtin_models"),
         ):
             result = CliRunner().invoke(
                 chat,
@@ -134,7 +134,7 @@ class TestChatAgents:
         with (
             patch("openjarvis.cli.chat_cmd.load_config", return_value=config),
             patch("openjarvis.engine.get_engine", return_value=("mock", engine)),
-            patch("openjarvis.intelligence.register_builtin_models"),
+            patch("openjarvis.engine.model_catalog.register_builtin_models"),
         ):
             result = CliRunner().invoke(
                 chat,
