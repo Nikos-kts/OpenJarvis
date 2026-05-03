@@ -37,8 +37,7 @@ at import time — discovered at runtime. Key agents:
 Hybrid RRF (sparse+dense fusion). Don't assume a backend — go through BaseTool.
 
 30+ channel adapters (`src/openjarvis/channels/`) and connector adapters
-(`src/openjarvis/connectors/`). Full MCP client/server in `src/openjarvis/mcp/`
-and Agent-to-Agent RPC in `src/openjarvis/a2a/`.
+(`src/openjarvis/connectors/`). Full MCP client/server in `src/openjarvis/mcp/`.
 
 ### 5. Learning (`src/openjarvis/learning/`, `src/openjarvis/traces/`)
 Every interaction produces a `Trace`. `LearningOrchestrator` runs an 8-step

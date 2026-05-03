@@ -29,3 +29,12 @@
 - Surgically removed two bench test classes from `tests/integration/test_integration.py` (TestBenchmarkRegistryDiscovery, TestBenchmarkSuiteRunAll)
 - Left `BenchmarkRegistry` in `core/registry.py` — generic registry, no remaining callers but harmless
 - Smoke: cli import OK; `bench` no longer in command list
+
+## [2026-05-03] cleanup | Phase B — cut a2a/ + templates/
+
+- Deleted `src/openjarvis/a2a/` (5 files, 460 LOC) and `tests/a2a/` — only inbound refs were tests
+- Deleted `src/openjarvis/templates/` (2 files, 115 LOC) and `tests/templates/` — only inbound ref was its own test
+- Updated `architecture.md` to drop the Agent-to-Agent RPC mention
+- Smoke: imports OK; no orphan refs
+
+Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pending closer look.
