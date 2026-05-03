@@ -74,6 +74,14 @@ Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pe
 - Smoke: imports OK; pytest collect = 4583 tests, 0 errors (down from 4592)
 - Architecture is now effectively 4 primitives (Engine, Agents, Tools+Memory, Intelligence-as-model-catalog). A.2.c renames intelligence/ into engine/ next; A.2.d rewrites architecture.md.
 
+## [2026-05-03] cleanup | Phase A.2.d — architecture.md rewrite (3 primitives)
+
+- Rewrote `architecture.md` to reflect the post-strip shape: 3 primitives (Engine, Agents, Tools+Memory) + `jarvis/` orchestration layer + Skills + Trace recording + channels/connectors as supporting cast
+- Added a "History note" pointing to ADR-0001 and ADR-0002 so future readers know why the 5-primitive frame is gone
+- Documented `engine/model_catalog.py` (post-A.2.c home of BUILTIN_MODELS), per-agent hardcoded routing (per ADR-0002), and `skills/discovery.py` (salvaged frequency-based pattern miner)
+- Tidied `gotchas.md` — replaced concrete "39 optional dep groups" with "many" since the count fluctuates as we prune
+- A.2 fully landed. Next: implement per-agent UI↔backend config endpoints per ADR-0002, when the user is ready.
+
 ## [2026-05-03] cleanup | Phase A.2.c — absorb intelligence/ into engine/
 
 - `git mv src/openjarvis/intelligence/model_catalog.py → src/openjarvis/engine/model_catalog.py`; deleted empty `src/openjarvis/intelligence/__init__.py` + dir

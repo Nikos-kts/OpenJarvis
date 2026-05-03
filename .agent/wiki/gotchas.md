@@ -16,9 +16,9 @@ importing `openjarvis_rust`. On Python 3.14+, set
 
 ## Optional deps are truly optional
 
-39 optional dep groups. Shared code must not assume any of them are installed.
-Import-guard optional dependencies inside the functions/classes that need them, not
-at module top-level.
+Many optional dep groups (count fluctuates as we prune). Shared code must not
+assume any of them are installed. Import-guard optional dependencies inside the
+functions/classes that need them, not at module top-level.
 
 ## Hardware-specific tests need markers
 

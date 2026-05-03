@@ -1,7 +1,7 @@
 # ADR-0001 — Strip vanilla openJarvis features (phased)
 
 **Date:** 2026-05-03
-**Status:** in progress (Phase A + A.1 + B + C + A.2.{a,b,c} landed; A.2.d [architecture refresh] pending)
+**Status:** A + A.1 + B + C + A.2.{a,b,c,d} landed (2026-05-03). Phase D (pyproject.toml deeper prune) deferred.
 
 ## Context
 
