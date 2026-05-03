@@ -19,11 +19,6 @@ except ImportError:
     pass
 
 try:
-    import openjarvis.connectors.gmail_imap  # noqa: F401
-except ImportError:
-    pass
-
-try:
     import openjarvis.connectors.gdrive  # noqa: F401
 except ImportError:
     pass  # httpx may not be installed
@@ -54,11 +49,6 @@ except ImportError:
     pass
 
 try:
-    import openjarvis.connectors.apple_music  # noqa: F401
-except ImportError:
-    pass
-
-try:
     import openjarvis.connectors.apple_contacts  # noqa: F401
 except ImportError:
     pass
@@ -69,19 +59,9 @@ except ImportError:
     pass
 
 try:
-    import openjarvis.connectors.outlook  # noqa: F401
-except ImportError:
-    pass
-
-try:
     import openjarvis.connectors.gcalendar  # noqa: F401
 except ImportError:
     pass
-
-try:
-    import openjarvis.connectors.dropbox  # noqa: F401
-except ImportError:
-    pass  # httpx may not be installed
 
 try:
     import openjarvis.connectors.whatsapp  # noqa: F401
@@ -105,11 +85,6 @@ except ImportError:
 
 try:
     import openjarvis.connectors.spotify  # noqa: F401
-except ImportError:
-    pass
-
-try:
-    import openjarvis.connectors.google_tasks  # noqa: F401
 except ImportError:
     pass
 

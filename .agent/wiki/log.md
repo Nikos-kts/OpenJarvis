@@ -38,3 +38,19 @@
 - Smoke: imports OK; no orphan refs
 
 Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pending closer look.
+
+## [2026-05-03] cleanup | Phase C — connector + channel pruning
+
+- Connectors cut: `dropbox`, `gmail_imap`, `apple_music`, `outlook`, `google_tasks` (5)
+- Spotify kept; user prefers spotify over apple_music for the music data source (correction during execution)
+- Channels cut: 12 niche/broadcast adapters — `line`, `viber`, `messenger`, `reddit`, `mastodon`, `xmpp`, `rocketchat`, `zulip`, `twitter`, `twitch`, `nostr`, `twilio_sms`
+- WhatsApp kept (`whatsapp.py` + `whatsapp_baileys.py` + `whatsapp_baileys_bridge/`); telegram, slack, discord, gmail, signal, teams, matrix, mattermost, feishu, bluebubbles, sendblue, google_chat, irc, webhook, webchat, email also kept
+- Edits:
+  - `channels/__init__.py` — 12 entries removed from `_CHANNEL_MODULES`
+  - `connectors/__init__.py` — 5 try/except auto-import blocks removed
+  - `tests/connectors/test_connector_health.py` — gmail_imap, outlook, dropbox removed from `_TOKEN_CONNECTORS`
+  - `tests/connectors/test_new_connectors_live.py` — `TestGoogleTasksLive` class removed
+  - `cli/deep_research_setup_cmd.py` — gmail_imap + outlook elif branches removed in `_instantiate_connector`
+  - `pyproject.toml` — 12 `channel-*` extras removed
+- Tests deleted: `test_twilio_sms`, `test_twitter_channel`, `test_twitter_bot_e2e`, `test_channels_phase21`, `test_dropbox`, `test_outlook`, `test_google_tasks`, `test_apple_music`
+- Smoke: imports OK; no orphan refs to cut targets

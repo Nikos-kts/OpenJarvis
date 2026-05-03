@@ -1,7 +1,7 @@
 # ADR-0001 — Strip vanilla openJarvis features (phased)
 
 **Date:** 2026-05-03
-**Status:** in progress (Phase A + A.1 landed)
+**Status:** in progress (Phase A + A.1 + B + C landed; A.2 blocked on architecture decision)
 
 ## Context
 

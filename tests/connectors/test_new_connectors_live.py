@@ -44,14 +44,3 @@ class TestSpotifyLive:
         docs = list(conn.sync(since=datetime.now() - timedelta(days=1)))
         assert all(isinstance(d, Document) for d in docs)
         assert all(d.source == "spotify" for d in docs)
-
-
-@pytest.mark.cloud
-class TestGoogleTasksLive:
-    def test_sync_returns_documents(self):
-        from openjarvis.connectors.google_tasks import GoogleTasksConnector
-
-        conn = GoogleTasksConnector()
-        docs = list(conn.sync(since=datetime.now() - timedelta(days=7)))
-        assert all(isinstance(d, Document) for d in docs)
-        assert all(d.source == "google_tasks" for d in docs)

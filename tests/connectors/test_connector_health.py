@@ -15,15 +15,12 @@ _LOCAL_CONNECTORS = [
 ]
 
 _TOKEN_CONNECTORS = [
-    ("gmail_imap", "openjarvis.connectors.gmail_imap", "GmailIMAPConnector"),
-    ("outlook", "openjarvis.connectors.outlook", "OutlookConnector"),
     ("slack", "openjarvis.connectors.slack_connector", "SlackConnector"),
     ("notion", "openjarvis.connectors.notion", "NotionConnector"),
     ("granola", "openjarvis.connectors.granola", "GranolaConnector"),
     ("gdrive", "openjarvis.connectors.gdrive", "GDriveConnector"),
     ("gcalendar", "openjarvis.connectors.gcalendar", "GCalendarConnector"),
     ("gcontacts", "openjarvis.connectors.gcontacts", "GContactsConnector"),
-    ("dropbox", "openjarvis.connectors.dropbox", "DropboxConnector"),
 ]
 
 _ALL_CONNECTORS = _LOCAL_CONNECTORS + _TOKEN_CONNECTORS

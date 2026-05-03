@@ -219,14 +219,6 @@ def _instantiate_connector(connector_id: str, config: Dict[str, Any]) -> Any:
         from openjarvis.connectors.obsidian import ObsidianConnector
 
         return ObsidianConnector(vault_path=config.get("vault_path", ""))
-    elif connector_id == "gmail_imap":
-        from openjarvis.connectors.gmail_imap import GmailIMAPConnector
-
-        return GmailIMAPConnector()
-    elif connector_id == "outlook":
-        from openjarvis.connectors.outlook import OutlookConnector
-
-        return OutlookConnector()
     elif connector_id == "slack":
         from openjarvis.connectors.slack_connector import SlackConnector
 
