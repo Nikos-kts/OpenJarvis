@@ -399,21 +399,6 @@ def ask(
     if max_tokens is None:
         max_tokens = config.intelligence.max_tokens
 
-    # Run complexity analysis on the query
-    from openjarvis.learning.routing.complexity import (
-        ComplexityResult,
-        adjust_tokens_for_model,
-        score_complexity,
-    )
-
-    complexity_result: ComplexityResult = score_complexity(query_text)
-    logger.debug(
-        "Complexity analysis: score=%.3f tier=%s suggested_max_tokens=%d",
-        complexity_result.score,
-        complexity_result.tier,
-        complexity_result.suggested_max_tokens,
-    )
-
     # Set up telemetry
     bus = EventBus(record_history=True)
     telem_store: TelemetryStore | None = None

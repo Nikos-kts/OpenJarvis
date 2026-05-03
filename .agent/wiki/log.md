@@ -54,6 +54,26 @@ Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pe
 - Smoke: cli imports OK; eval/compose/optimize/learning not in command list
 - Next: A.2.b — salvage skill_discovery, strip rest of learning/ + evals/
 
+## [2026-05-03] cleanup | Phase A.2.b — strip learning/ + evals/, salvage skill_discovery
+
+- Salvaged `learning/agents/skill_discovery.py` → `skills/discovery.py` (verbatim — already lean ~200 LOC, no ML/RL/LoRA, just frequency-based pattern miner)
+- Moved `tests/learning/test_skill_discovery.py` → `tests/skills/test_discovery.py` (import updated)
+- Patched 9 inbound import sites:
+  - `agents/orchestrator.py` — replaced `learning.intelligence.orchestrator.prompt_registry.build_system_prompt` fallback with inline default `"You are a helpful assistant."` (Jarvis overrides via persona)
+  - `agents/executor.py` — removed router_policy override block (per ADR-0002 hardcoded routing)
+  - `server/api_routes.py` — updated skill_discovery import path; deleted `/v1/learning/policy` endpoint and entire `/v1/optimize/*` router (3 endpoints + `OptimizeRunRequest` model + include + `__all__`)
+  - `server/routes.py` — removed complexity-based max_tokens bump; `complexity_info = None` per ADR-0002
+  - `cli/ask.py` — removed `learning.routing.complexity` import + score_complexity call + debug log
+  - `system/core.py` — dropped TYPE_CHECKING imports of `RouterPolicy`/`LearningOrchestrator`; removed `router` field and `_learning_orchestrator` field from JarvisSystem
+  - `system/builder.py` — removed `_setup_learning_orchestrator` static method + its caller (lines 214 + 298)
+  - `recipes/composer.py` — deleted `recipe_to_eval_suite` (kept `recipe_to_operator`); updated `__all__` and `recipes/__init__.py`
+  - `skills/manager.py` — updated skill_discovery import path
+- Deleted `src/openjarvis/learning/` (~14K LOC, 7 subpackages) and `src/openjarvis/evals/` (~32K LOC, datasets + scorers + benchmarks)
+- Deleted broken/obsolete tests: `tests/learning/`, `tests/evals/`, `tests/intelligence/{test_router,test_routing_models}.py`, `tests/agents/test_learning_integration.py`, `tests/telemetry/test_energy_wiring.py` (CLI bench-tied), `tests/test_orchestrator_learning/` (whole dir)
+- pyproject.toml: removed extras `orchestrator-training`, `learning-dspy`, `learning-gepa`, `eval-wandb`, `eval-sheets`
+- Smoke: imports OK; pytest collect = 4583 tests, 0 errors (down from 4592)
+- Architecture is now effectively 4 primitives (Engine, Agents, Tools+Memory, Intelligence-as-model-catalog). A.2.c renames intelligence/ into engine/ next; A.2.d rewrites architecture.md.
+
 ## [2026-05-03] cleanup | Phase C — connector + channel pruning
 
 - Connectors cut: `dropbox`, `gmail_imap`, `apple_music`, `outlook`, `google_tasks` (5)

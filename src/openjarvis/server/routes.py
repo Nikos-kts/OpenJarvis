@@ -116,42 +116,8 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
         except Exception:
             logger.debug("Memory context injection failed", exc_info=True)
 
-    # Run complexity analysis on the last user message
+    # ADR-0002: hardcoded routing — no adaptive complexity-based token bump.
     complexity_info = None
-    query_text_for_complexity = ""
-    for m in reversed(request_body.messages):
-        if m.role == "user" and m.content:
-            query_text_for_complexity = m.content
-            break
-    if query_text_for_complexity:
-        try:
-            from openjarvis.learning.routing.complexity import (
-                adjust_tokens_for_model,
-                score_complexity,
-            )
-
-            cr = score_complexity(query_text_for_complexity)
-            suggested = adjust_tokens_for_model(
-                cr.suggested_max_tokens,
-                model,
-            )
-            complexity_info = ComplexityInfo(
-                score=cr.score,
-                tier=cr.tier,
-                suggested_max_tokens=suggested,
-            )
-            # Bump max_tokens when complexity suggests more than what
-            # the client requested — never reduce below the request value.
-            if suggested > request_body.max_tokens:
-                request_body.max_tokens = suggested
-            logger.debug(
-                "Complexity analysis: score=%.3f tier=%s suggested_max_tokens=%d",
-                cr.score,
-                cr.tier,
-                suggested,
-            )
-        except Exception:
-            logger.debug("Complexity analysis failed", exc_info=True)
 
     if request_body.stream:
         bus = getattr(request.app.state, "bus", None)

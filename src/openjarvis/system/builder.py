@@ -211,7 +211,6 @@ class SystemBuilder:
                 logger.warning("Failed to initialize TraceStore", exc_info=True)
 
         capability_policy = sec.capability_policy
-        learning_orchestrator = self._setup_learning_orchestrator(config)
 
         agent_manager = None
         if config.agent_manager.enabled:
@@ -295,7 +294,6 @@ class SystemBuilder:
             speech_backend=speech_backend,
             skill_manager=skill_manager,
         )
-        system._learning_orchestrator = learning_orchestrator
         system._skill_few_shot_examples = skill_few_shot_examples
         system._mcp_clients = list(getattr(self, "_mcp_clients", []))
         if system.agent_executor is not None:
@@ -534,38 +532,6 @@ class SystemBuilder:
             )
         except Exception as exc:
             logger.warning("Failed to set up session store: %s", exc)
-            return None
-
-    @staticmethod
-    def _setup_learning_orchestrator(config: JarvisConfig):
-        if not config.learning.training_enabled:
-            return None
-        try:
-            from openjarvis.core.config import DEFAULT_CONFIG_DIR
-            from openjarvis.learning.learning_orchestrator import (
-                LearningOrchestrator,
-            )
-            from openjarvis.learning.training.lora import LoRATrainingConfig
-            from openjarvis.traces.store import TraceStore
-
-            trace_store = TraceStore(db_path=config.traces.db_path)
-            config_dir = DEFAULT_CONFIG_DIR / "agent_configs"
-
-            sft_cfg = config.learning.intelligence.sft
-            lora_config = LoRATrainingConfig(
-                lora_rank=sft_cfg.lora_rank,
-                lora_alpha=sft_cfg.lora_alpha,
-            )
-
-            return LearningOrchestrator(
-                trace_store=trace_store,
-                config_dir=config_dir,
-                min_improvement=config.learning.min_improvement,
-                min_sft_pairs=sft_cfg.min_pairs,
-                lora_config=lora_config,
-            )
-        except Exception as exc:
-            logger.warning("Failed to set up learning orchestrator: %s", exc)
             return None
 
     def _discover_external_mcp(self, server_cfg) -> List[BaseTool]:

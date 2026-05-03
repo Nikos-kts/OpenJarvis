@@ -252,7 +252,7 @@ class SkillManager:
         hyphens, no underscores) so the resulting manifests load cleanly
         through the discovery walker.
         """
-        from openjarvis.learning.agents.skill_discovery import SkillDiscovery
+        from openjarvis.skills.discovery import SkillDiscovery
 
         traces = trace_store.list_traces(limit=10000)
         discovery = SkillDiscovery(

@@ -24,8 +24,6 @@ if TYPE_CHECKING:
     from openjarvis.agents.manager import AgentManager
     from openjarvis.agents.scheduler import AgentScheduler
     from openjarvis.channels._stubs import BaseChannel
-    from openjarvis.learning._stubs import RouterPolicy
-    from openjarvis.learning.learning_orchestrator import LearningOrchestrator
     from openjarvis.mcp.client import MCPClient
     from openjarvis.mcp.server import MCPServer
     from openjarvis.operators.manager import OperatorManager
@@ -64,7 +62,6 @@ class JarvisSystem:
     tool_executor: Optional[ToolExecutor] = None
     memory_backend: Optional[MemoryBackend] = None
     channel_backend: Optional[BaseChannel] = None
-    router: Optional[RouterPolicy] = None
     mcp_server: Optional[MCPServer] = None
     telemetry_store: Optional[TelemetryStore] = None
     trace_store: Optional[TraceStore] = None
@@ -84,7 +81,6 @@ class JarvisSystem:
     agent_executor: Optional[AgentExecutor] = None
     speech_backend: Optional[SpeechBackend] = None
     skill_manager: Optional[SkillManager] = None
-    _learning_orchestrator: Optional[LearningOrchestrator] = None
     _mcp_clients: List[MCPClient] = field(default_factory=list)
 
     @property

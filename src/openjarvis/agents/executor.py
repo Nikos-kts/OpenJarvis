@@ -256,27 +256,6 @@ class AgentExecutor:
         )
         self._set_activity(agent["id"], f"Loading model {model}...")
 
-        # Optionally override model via router policy
-        router_policy_key = config.get("router_policy")
-        if router_policy_key and self._system:
-            try:
-                from openjarvis.core.registry import RouterPolicyRegistry
-                from openjarvis.learning.routing.types import (
-                    build_routing_context,
-                )
-
-                policy = RouterPolicyRegistry.create(
-                    router_policy_key,
-                    available_models=[model],
-                )
-                instruction = config.get("instruction", "")
-                ctx = build_routing_context(instruction)
-                selected = policy.select_model(ctx)
-                if selected:
-                    model = selected
-            except Exception:
-                pass  # Fall back to configured model
-
         # Resolve tools from config via ToolRegistry
         tool_names = config.get("tools", [])
         if isinstance(tool_names, str):

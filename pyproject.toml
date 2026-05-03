@@ -82,9 +82,6 @@ gpu-metrics = ["pynvml>=12.0"]
 energy-amd = ["amdsmi>=6.1"]
 energy-apple = ["zeus-ml[apple]"]
 energy-all = ["pynvml>=12.0", "amdsmi>=6.1", "zeus-ml[apple]"]
-orchestrator-training = ["torch>=2.0", "transformers>=4.40"]
-learning-dspy = ["dspy>=2.6"]
-learning-gepa = ["gepa>=0.1"]
 channel-telegram = ["python-telegram-bot>=21.0"]
 channel-discord = ["discord.py>=2.3"]
 channel-slack = ["slack-sdk>=3.27"]
@@ -103,8 +100,6 @@ sandbox-docker = ["docker>=7.0"]
 dashboard = ["textual>=0.80"]
 speech = ["faster-whisper>=1.0"]
 speech-deepgram = ["deepgram-sdk>=3.0"]
-eval-wandb = ["wandb>=0.17"]
-eval-sheets = ["gspread>=6.0", "google-auth>=2.0"]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",

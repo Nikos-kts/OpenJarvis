@@ -112,11 +112,7 @@ class OrchestratorAgent(ToolUsingAgent):
         if self._system_prompt:
             sys_prompt = self._system_prompt
         else:
-            from openjarvis.learning.intelligence.orchestrator.prompt_registry import (
-                build_system_prompt,
-            )
-
-            sys_prompt = build_system_prompt(tools=self._tools)
+            sys_prompt = "You are a helpful assistant."
 
         messages = self._build_messages(input, context, system_prompt=sys_prompt)
 
