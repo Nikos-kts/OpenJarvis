@@ -13,7 +13,7 @@
 # Engine — which local inference runtime(s) to talk to
 # =============================================================================
 [engine]
-default = "ollama"                     # ollama | vllm | sglang | llamacpp | mlx | lmstudio | exo | nexa | uzu | apple_fm | gemmacpp | lemonade
+default = "mlx"                     # ollama | vllm | sglang | llamacpp | mlx | lmstudio | exo | nexa | uzu | apple_fm | gemmacpp | lemonade
 
 [engine.ollama]
 # host = "http://localhost:11434"      # set to remote URL if engine runs elsewhere
@@ -58,6 +58,45 @@ default = "ollama"                     # ollama | vllm | sglang | llamacpp | mlx
 # =============================================================================
 # Intelligence — model identity and generation defaults
 # =============================================================================
+host = ""
+
+[engine.vllm]
+host = "http://localhost:8000"
+
+[engine.sglang]
+host = "http://localhost:30000"
+
+[engine.llamacpp]
+host = "http://localhost:8080"
+binary_path = ""
+
+[engine.mlx]
+host = "http://localhost:8080"
+
+[engine.lmstudio]
+host = "http://localhost:1234"
+
+[engine.exo]
+host = "http://localhost:52415"
+
+[engine.nexa]
+host = "http://localhost:18181"
+device = ""
+
+[engine.uzu]
+host = "http://localhost:8000"
+
+[engine.apple_fm]
+host = "http://localhost:8079"
+
+[engine.gemma_cpp]
+model_path = ""
+tokenizer_path = ""
+model_type = ""
+num_threads = 0
+
+[engine.lemonade]
+host = "http://localhost:8000"
 [intelligence]
 default_model = "qwen2.5:7b"           # recommended for this hardware
 # fallback_model = ""                  # used when the default is unreachable

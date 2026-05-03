@@ -74,6 +74,15 @@ Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pe
 - Smoke: imports OK; pytest collect = 4583 tests, 0 errors (down from 4592)
 - Architecture is now effectively 4 primitives (Engine, Agents, Tools+Memory, Intelligence-as-model-catalog). A.2.c renames intelligence/ into engine/ next; A.2.d rewrites architecture.md.
 
+## [2026-05-03] persona | populate SOUL/USER/MEMORY + split out briefing persona
+
+- Rewrote `.openJarvis/SOUL.md` from the briefing-context mishmash to a clean global persona distilled from vault `jarvis/wiki/identity/{self,values,voice,relationship}.md` (3810/4000 chars, no trimming)
+- Wrote `.openJarvis/USER.md` (1459/1500) — tight Nikos card + topical pointers into the obsidian vault for `memory_search` retrieval
+- Wrote `.openJarvis/MEMORY.md` (2474/2500) as the **memory router**: tells Jarvis where to look for what — already-inline files, vault banks, project wiki, retrieval tools, what to remember vs. look up
+- Moved the briefing-specific rules (no markdown / spoken aloud / email + message triage / "skip silently if disconnected") out of SOUL.md → `.openJarvis/prompts/personas/jarvis.md`. That's where `agents/morning_digest.py:_load_persona` already looks (it tries `configs/openjarvis/prompts/personas/<name>.md` then `.openJarvis/prompts/personas/<name>.md`).
+- Smoke: `JarvisPersona.render_prompt()` returns ~9.5K chars total (header + 3 inline files + sub-agents + skills + time), no `…[trimmed]…` markers, vault pointers preserved at the tail.
+- Caps for reference: `soul_max_chars=4000`, `memory_max_chars=2500`, `user_max_chars=1500` (in `core/config.py`).
+
 ## [2026-05-03] cleanup | Phase A.2.d — architecture.md rewrite (3 primitives)
 
 - Rewrote `architecture.md` to reflect the post-strip shape: 3 primitives (Engine, Agents, Tools+Memory) + `jarvis/` orchestration layer + Skills + Trace recording + channels/connectors as supporting cast
