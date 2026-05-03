@@ -8,7 +8,6 @@ import openjarvis
 from openjarvis.cli.add_cmd import add
 from openjarvis.cli.agent_cmd import agent
 from openjarvis.cli.ask import ask
-from openjarvis.cli.bench_cmd import bench
 from openjarvis.cli.channel_cmd import channel
 from openjarvis.cli.channels_cmd import channels
 from openjarvis.cli.chat_cmd import chat
@@ -69,7 +68,6 @@ cli.add_command(serve, "serve")
 cli.add_command(model, "model")
 cli.add_command(memory, "memory")
 cli.add_command(telemetry, "telemetry")
-cli.add_command(bench, "bench")
 cli.add_command(channel, "channel")
 cli.add_command(channels, "channels")
 cli.add_command(scheduler, "scheduler")

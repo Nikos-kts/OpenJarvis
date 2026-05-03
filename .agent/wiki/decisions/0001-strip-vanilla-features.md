@@ -1,7 +1,7 @@
 # ADR-0001 — Strip vanilla openJarvis features (phased)
 
 **Date:** 2026-05-03
-**Status:** in progress (Phase A landed)
+**Status:** in progress (Phase A + A.1 landed)
 
 ## Context
 
@@ -23,12 +23,12 @@ Strip in phases, each its own commit, smoke-tested before commit. No tags.
 - `src/openjarvis/voice/` — empty placeholder, 0 inbound refs.
 - `examples/` — 10 vanilla demo projects, 0 src refs.
 
-### Phase A.1 — `bench/` strip (proposed)
+### Phase A.1 — `bench/` strip (landed 2026-05-03)
 
-Small (68K, 6 files). Inbound: `cli/bench_cmd.py` + 2 integration test files.
-Cut: `bench/` + `cli/bench_cmd.py` + `tests/bench/` + bench refs in
-`tests/integration/test_integration.py`. Optional dep groups: `gpu-metrics`,
-`energy-amd`, `energy-apple`, `energy-all` candidates.
+Small (68K, 6 files). Cut: `bench/` + `cli/bench_cmd.py` + `tests/bench/` +
+bench refs in `tests/integration/test_integration.py` + `bench` cli command
+registration. `BenchmarkRegistry` in `core/registry.py` left as-is (generic).
+Energy/GPU optional deps left intact — they're shared with `telemetry/`.
 
 ### Phase A.2 — `evals/` + `learning/` (deferred, needs review)
 
