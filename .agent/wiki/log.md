@@ -39,6 +39,21 @@
 
 Phase B "review" modules (prompt, workflow, daemon) deferred — not yet cut, pending closer look.
 
+## [2026-05-03] decision | ADR-0002 — hardcoded routing with UI↔backend config
+
+- Adaptive routing has no signal at N=1; replaced with per-agent hardcoded routing in user-editable config, exposed via UI
+- Per-agent (Jarvis + each sub-agent) `engine` + `model` selection — local OR cloud, user's call
+- Unblocks A.2 — `learning/` adaptive layer no longer needed; `evals/` not relevant for single-user
+- See [[decisions/0002-hardcoded-routing-with-ui-config]]
+
+## [2026-05-03] cleanup | Phase A.2.a — drop CLI commands tied to learning/evals
+
+- Deleted `src/openjarvis/cli/{compose,eval,optimize}_cmd.py`
+- Removed 4 imports + 4 `cli.add_command(...)` calls from `cli/__init__.py`: `compose`, `eval_group`, `optimize_group`, `learning_group` (last from `learning.distillation.cli`)
+- `feedback_cmd` left intact — it uses `traces.store`, not learning/evals; trace recording stays per ADR-0001 (Q1)
+- Smoke: cli imports OK; eval/compose/optimize/learning not in command list
+- Next: A.2.b — salvage skill_discovery, strip rest of learning/ + evals/
+
 ## [2026-05-03] cleanup | Phase C — connector + channel pruning
 
 - Connectors cut: `dropbox`, `gmail_imap`, `apple_music`, `outlook`, `google_tasks` (5)

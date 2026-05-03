@@ -9,6 +9,7 @@
 ## Decisions
 
 - [[decisions/0001-strip-vanilla-features]] — phased strip of vanilla openJarvis surface (2026-05-03)
+- [[decisions/0002-hardcoded-routing-with-ui-config]] — single-user Jarvis uses hardcoded per-agent routing; no adaptive layer (2026-05-03)
 
 ## Gotchas
 
