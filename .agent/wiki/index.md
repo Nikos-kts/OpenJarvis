@@ -8,7 +8,7 @@
 
 ## Decisions
 
-*(Add as decisions are made.)*
+- [[decisions/0001-strip-vanilla-features]] — phased strip of vanilla openJarvis surface (2026-05-03)
 
 ## Gotchas
 
